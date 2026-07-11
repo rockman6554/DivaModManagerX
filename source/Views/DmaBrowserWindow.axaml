@@ -1,0 +1,94 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:DivaModManager.ViewModels"
+        xmlns:ail="clr-namespace:AsyncImageLoader;assembly=AsyncImageLoader.Avalonia"
+        x:Class="DivaModManager.Views.DmaBrowserWindow"
+        Icon="avares://DivaModManager/Assets/miku.ico"
+        Title="DivaModArchive Browser"
+        Background="#131313"
+        Width="1100" Height="720"
+        MinWidth="800" MinHeight="500"
+        WindowStartupLocation="CenterOwner">
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+
+        <!-- Search bar -->
+        <Border Grid.Row="0" Background="#1F1F1F" Padding="12,8" BorderBrush="#333" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto">
+                <TextBox Grid.Column="0" x:Name="SearchBox" Watermark="Search DMA mods..." Text="{Binding SearchQuery, Mode=TwoWay}" KeyDown="SearchBox_KeyDown"/>
+                <Button Grid.Column="1" Content="Search" Click="Search_Click" Classes="primary" Margin="6,0,0,0"/>
+                <Button Grid.Column="2" Content="Open DMA" Click="OpenDma_Click" Margin="6,0,0,0"/>
+                <TextBlock Grid.Column="3" Text="Sort:" Foreground="#888" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                <ComboBox Grid.Column="4" x:Name="SortBox" SelectedIndex="{Binding SelectedSortIndex, Mode=TwoWay}" Margin="6,0,0,0">
+                    <ComboBoxItem>Latest</ComboBoxItem>
+                    <ComboBoxItem>Downloads</ComboBoxItem>
+                    <ComboBoxItem>Likes</ComboBoxItem>
+                </ComboBox>
+                <TextBlock Grid.Column="5" Text="Filter:" Foreground="#888" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                <ComboBox Grid.Column="6" x:Name="FilterBox" SelectedIndex="{Binding SelectedFilterIndex, Mode=TwoWay}" Margin="6,0,0,0">
+                    <ComboBoxItem>All</ComboBoxItem>
+                    <ComboBoxItem>Song</ComboBoxItem>
+                    <ComboBoxItem>Cover</ComboBoxItem>
+                    <ComboBoxItem>Module</ComboBoxItem>
+                    <ComboBoxItem>UI</ComboBoxItem>
+                    <ComboBoxItem>Plugin</ComboBoxItem>
+                    <ComboBoxItem>Other</ComboBoxItem>
+                </ComboBox>
+            </Grid>
+        </Border>
+
+        <!-- Page navigation -->
+        <Border Grid.Row="1" Background="#1A1A1A" Padding="12,6">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
+                <Button Grid.Column="0" Content="&lt;&lt; Prev" Click="PrevPage_Click" IsEnabled="{Binding CanGoPrev}"/>
+                <TextBlock Grid.Column="1" Text="{Binding PageLabel}" VerticalAlignment="Center" Margin="12,0" Foreground="{DynamicResource MikuAccentBrush}"/>
+                <Button Grid.Column="3" Content="Next &gt;&gt;" Click="NextPage_Click" IsEnabled="{Binding CanGoNext}"/>
+                <TextBlock Grid.Column="4" Text="{Binding ResultCount}" Foreground="#888" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                <ProgressBar Grid.Column="5" Value="{Binding ProgressValue}" Maximum="100" Width="120" IsVisible="{Binding IsLoading}"/>
+            </Grid>
+        </Border>
+
+        <!-- Results list -->
+        <Border Grid.Row="3" Background="#0F0F0F" Margin="8,0">
+            <ListBox x:Name="ResultsList"
+                     ItemsSource="{Binding Posts}"
+                     SelectedItem="{Binding SelectedPost, Mode=TwoWay}"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     DoubleTapped="ResultsList_DoubleTapped">
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="vm:DmaPostViewModel">
+                        <Border Background="#1F1F1F" BorderBrush="#333" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,4">
+                            <Grid ColumnDefinitions="120,*,Auto">
+                                <ail:AdvancedImage Grid.Column="0" Source="{Binding ThumbnailUrl}" Width="120" Height="70" Stretch="UniformToFill"/>
+                                <StackPanel Grid.Column="1" Margin="12,0" Spacing="4">
+                                    <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="14" TextWrapping="Wrap"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="12">
+                                        <TextBlock Text="{Binding AuthorLabel}" Foreground="#888" FontSize="11"/>
+                                        <TextBlock Text="{Binding TypeLabel}" Foreground="{DynamicResource MikuAccentBrush}" FontSize="11"/>
+                                        <TextBlock Text="{Binding DateLabel}" Foreground="#888" FontSize="11"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,2,0,0">
+                                        <TextBlock Text="{Binding DownloadsLabel}" Foreground="#888" FontSize="11"/>
+                                        <TextBlock Text="{Binding LikesLabel}" Foreground="#888" FontSize="11"/>
+                                        <TextBlock Text="{Binding FilesLabel}" Foreground="{DynamicResource MikuPinkBrush}" FontSize="11"/>
+                                        <TextBlock Text="{Binding SizeLabel}" Foreground="#888" FontSize="11"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <Button Grid.Column="2" Content="Install" Click="Install_Click" Classes="primary" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <!-- Selected mod detail -->
+        <Border Grid.Row="4" Background="#1F1F1F" Padding="12,8" BorderBrush="#333" BorderThickness="0,1,0,0">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Text="{Binding SelectedDetail}" Foreground="#CCC" TextWrapping="Wrap" FontSize="11"/>
+                <Button Grid.Column="1" Content="Close" Click="Close_Click" Margin="12,0,0,0"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

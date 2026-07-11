@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="x-scheme-handler/divamodmanager">
+    <comment>Diva Mod Manager 1-click install URL</comment>
+    <comment xml:lang="es">URL de instalación en 1 clic de Diva Mod Manager</comment>
+    <icon name="divamodmanager"/>
+  </mime-type>
+</mime-info>

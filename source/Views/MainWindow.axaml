@@ -1,0 +1,159 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:DivaModManager.ViewModels"
+        xmlns:models="using:DivaModManager.Models"
+        x:Class="DivaModManager.Views.MainWindow"
+        Icon="avares://DivaModManager/Assets/miku.ico"
+        Title="Diva Mod Manager (Linux Port)"
+        Background="#131313"
+        MinWidth="900" MinHeight="600"
+        WindowStartupLocation="CenterScreen">
+
+    <Grid RowDefinitions="Auto,*,Auto,Auto">
+
+        <!-- Top toolbar -->
+        <Border Grid.Row="0" Background="#1F1F1F" Padding="12,8" BorderBrush="#333" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Text="Diva Mod Manager" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource MikuAccentBrush}"/>
+                    <TextBlock Text="(Linux Port v1.3.1)" Foreground="#888" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                    <Button Content="Setup" Command="{Binding SetupCommand}" Classes="primary"/>
+                    <Button Content="GameBanana" Command="{Binding OpenGameBananaBrowserCommand}" ToolTip.Tip="Browse mods on GameBanana"/>
+                    <Button Content="DMA" Command="{Binding OpenDmaBrowserCommand}" ToolTip.Tip="Browse mods on DivaModArchive"/>
+                    <Button Content="From URL" Command="{Binding InstallFromUrlCommand}" ToolTip.Tip="Install from a GameBanana or DMA URL"/>
+                    <Button Content="Open Mods" Command="{Binding OpenModsFolderCommand}"/>
+                    <Button Content="Refresh" Command="{Binding RefreshModsCommand}"/>
+                    <Button Content="Launch" Command="{Binding LaunchCommand}" Classes="primary"/>
+                    <Button Content="Force Kill" Command="{Binding ForceKillGameCommand}" Classes="danger" ToolTip.Tip="Force-kill the game if it freezes on exit"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Main content: 3 columns (mod list / mod detail / sidebar) -->
+        <Grid Grid.Row="1" ColumnDefinitions="2*,1*,1*" Margin="8">
+
+            <!-- Column 1: Mods list with drag-drop reorder -->
+            <Border Grid.Column="0" Classes="panel">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                        <TextBlock Grid.Column="0" Text="Mods" Classes="header"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                            <Button Content="Up" Command="{Binding MoveUpCommand}" Padding="8,2"/>
+                            <Button Content="Down" Command="{Binding MoveDownCommand}" Padding="8,2"/>
+                            <Button Content="A-Z" Command="{Binding SortAlphabeticalCommand}" Padding="8,2" ToolTip.Tip="Sort alphabetically"/>
+                            <Button Content="Delete" Command="{Binding DeleteModCommand}" Classes="danger" Padding="8,2"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <DataGrid Grid.Row="1"
+                              ItemsSource="{Binding ModList}"
+                              SelectedItem="{Binding SelectedMod, Mode=TwoWay}"
+                              GridLinesVisibility="Horizontal"
+                              BorderThickness="1"
+                              BorderBrush="#333"
+                              CanUserReorderColumns="False"
+                              CanUserSortColumns="False"
+                              IsReadOnly="True"
+                              AutoGenerateColumns="False">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Mod Name" Binding="{Binding name}" Width="*"/>
+                            <DataGridCheckBoxColumn Header="Enabled" Binding="{Binding enabled, Mode=TwoWay}" Width="80"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <TextBlock Grid.Row="2" Text="Use Up/Down to reorder. Check the box to toggle a mod." Foreground="#888" FontSize="11" Margin="0,4,0,0"/>
+                </Grid>
+            </Border>
+
+            <!-- Column 2: Mod detail / metadata -->
+            <Border Grid.Column="1" Classes="panel" Margin="8,0">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <TextBlock Grid.Row="0" Text="Mod Info" Classes="header" Margin="0,0,0,8"/>
+                    <StackPanel Grid.Row="1" Spacing="6">
+                        <TextBlock Text="Name:" Foreground="#888" FontSize="11"/>
+                        <TextBlock Text="{Binding SelectedMod.name, FallbackValue='(no mod selected)'}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                        <TextBlock Text="Enabled:" Foreground="#888" FontSize="11" Margin="0,8,0,0"/>
+                        <TextBlock Text="{Binding SelectedMod.enabled, FallbackValue='—'}"/>
+                        <Button Content="Toggle" Command="{Binding ToggleModCommand}" CommandParameter="{Binding SelectedMod}" Margin="0,8,0,0" Padding="8,4"/>
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Spacing="4">
+                        <TextBlock Text="Game:" Foreground="#888" FontSize="11"/>
+                        <TextBlock Text="{Binding CurrentGame}" TextWrapping="Wrap"/>
+                        <TextBlock Text="Mods Folder:" Foreground="#888" FontSize="11" Margin="0,8,0,0"/>
+                        <TextBlock Text="{Binding ModsFolderPath}" TextWrapping="Wrap" FontFamily="Roboto Mono,monospace" FontSize="11"/>
+                        <TextBlock Text="Game Exe:" Foreground="#888" FontSize="11" Margin="0,8,0,0"/>
+                        <TextBlock Text="{Binding GameExePath}" TextWrapping="Wrap" FontFamily="Roboto Mono,monospace" FontSize="11"/>
+                        <TextBlock Text="DML Version:" Foreground="#888" FontSize="11" Margin="0,8,0,0"/>
+                        <TextBlock Text="{Binding DmlVersion}" Foreground="{DynamicResource MikuAccentBrush}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Column 3: Loadouts + Steam status -->
+            <Border Grid.Column="2" Classes="panel" Margin="8,0,0,0">
+                <Grid RowDefinitions="Auto,*,Auto,Auto">
+                    <StackPanel Grid.Row="0" Spacing="6" Margin="0,0,0,12">
+                        <TextBlock Text="Loadout" Classes="header"/>
+                        <ComboBox ItemsSource="{Binding Loadouts}"
+                                  SelectedItem="{Binding SelectedLoadout, Mode=TwoWay}"
+                                  HorizontalAlignment="Stretch"/>
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <Button Content="+" Command="{Binding AddLoadoutCommand}" Padding="12,4" ToolTip.Tip="New loadout"/>
+                            <Button Content="-" Command="{Binding DeleteLoadoutCommand}" Padding="12,4" ToolTip.Tip="Delete current loadout"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1"/>
+
+                    <!-- Steam launch status -->
+                    <Border Grid.Row="2" Background="#0F0F0F" BorderBrush="#333" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,8">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Steam Launch Status" Classes="header"/>
+                            <TextBlock Text="{Binding SteamStatus}" TextWrapping="Wrap" FontSize="11"/>
+                            <Button Content="Configure Steam" Command="{Binding ConfigureSteamCommand}" Margin="0,4,0,0" HorizontalAlignment="Stretch"
+                                    ToolTip.Tip="Auto-write WINEDLLOVERRIDES=dinput8.dll=n,b to Steam's launch options"/>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Grid.Row="3" Spacing="4">
+                        <Button Content="Check for DML Update" Command="{Binding CheckForDmlUpdateCommand}" HorizontalAlignment="Stretch"/>
+                        <Button Content="Check for DMM Update" Command="{Binding CheckForSelfUpdateCommand}" HorizontalAlignment="Stretch"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Progress bar -->
+        <Border Grid.Row="2" Background="#1F1F1F" Padding="12,6" BorderBrush="#333" BorderThickness="0,1,0,0"
+                IsVisible="{Binding ProgressVisible}">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <ProgressBar Value="{Binding ProgressValue}" Maximum="100" Width="200"/>
+                    <TextBlock Text="{Binding ProgressLabel}" Foreground="#CCC"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Log console -->
+        <Border Grid.Row="3" Background="#0F0F0F" Padding="8" BorderBrush="#333" BorderThickness="0,1,0,0" Height="160">
+            <Grid RowDefinitions="Auto,*">
+                <TextBlock Grid.Row="0" Text="Log" Classes="header" Margin="0,0,0,4"/>
+                <ListBox Grid.Row="1" ItemsSource="{Binding LogEntries}" Background="Transparent" BorderThickness="0">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="vm:LogEntry">
+                            <TextBlock FontFamily="Roboto Mono,monospace" FontSize="11" TextWrapping="NoWrap">
+                                <Run Text="{Binding Timestamp, StringFormat='[HH:mm:ss] '}"/>
+                                <Run Text="{Binding TypeTag}" Foreground="{Binding Color}"/>
+                                <Run Text=" "/>
+                                <Run Text="{Binding Message}"/>
+                            </TextBlock>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

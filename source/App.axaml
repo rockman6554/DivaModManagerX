@@ -1,0 +1,26 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="DivaModManager.App"
+             RequestedThemeVariant="Dark">
+
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+        <StyleInclude Source="avares://DivaModManager/Styles/AppStyles.axaml" />
+    </Application.Styles>
+
+    <Application.Resources>
+        <Color x:Key="MikuAccent">#39C5BB</Color>
+        <Color x:Key="MikuAccentDark">#2A8C84</Color>
+        <Color x:Key="MikuPink">#FF6B9D</Color>
+        <SolidColorBrush x:Key="MikuAccentBrush" Color="#39C5BB" />
+        <SolidColorBrush x:Key="MikuAccentDarkBrush" Color="#2A8C84" />
+        <SolidColorBrush x:Key="MikuPinkBrush" Color="#FF6B9D" />
+        <SolidColorBrush x:Key="PanelBackground" Color="#1A1A1A" />
+        <SolidColorBrush x:Key="PanelBackgroundAlt" Color="#222222" />
+        <SolidColorBrush x:Key="BorderBrush" Color="#333333" />
+        <SolidColorBrush x:Key="LogInfoBrush" Color="#52FF00" />
+        <SolidColorBrush x:Key="LogWarningBrush" Color="#FFFF00" />
+        <SolidColorBrush x:Key="LogErrorBrush" Color="#FFB0B0" />
+    </Application.Resources>
+</Application>

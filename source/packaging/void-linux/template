@@ -1,0 +1,70 @@
+# Template file for 'divamodmanager'
+#
+# Builds the Linux/Avalonia port of TekkaGB's DivaModManager from source.
+# Tested on Void Linux x86_64 glibc. For musl, swap the runtime identifier to
+# linux-musl-x64 and ensure dotnet-sdk is built against musl.
+#
+# Upstream: https://github.com/TekkaGB/DivaModManager
+# Linux port: this template builds from a local src tarball or a fork repo.
+
+pkgname=divamodmanager
+version=1.3.1
+revision=1
+archs="x86_64"
+build_style=meta
+hostmakedepends="dotnet-sdk>=8.0"
+makedepends="dotnet-runtime>=8.0"
+depends="dotnet-runtime>=8.0 libX11 libXext libXft libXi libXrender fontconfig freetype"
+short_desc="Mod manager for Hatsune Miku: Project DIVA Mega Mix+ (Linux/Avalonia port)"
+maintainer="Your Name <you@example.com>"
+license="GPL-3.0-or-later"
+homepage="https://github.com/TekkaGB/DivaModManager"
+distfiles="https://github.com/TekkaGB/DivaModManager/archive/refs/tags/${version}.tar.gz"
+checksum="<sha256-of-upstream-tarball>"
+
+# Override the build to invoke dotnet publish with our Linux port source.
+do_build() {
+    # The src tarball ships TekkaGB's original Windows-only WPF code.
+    # Apply the Linux/Avalonia port patches (see files/linux-port.patch).
+    # If you maintain your own fork, change `distfiles` to point at it instead.
+    [ -f linux-port.patch ] && patch -p1 < linux-port.patch
+
+    cd DivaModManager
+    dotnet publish DivaModManager.csproj \
+        -c Release \
+        -r linux-x64 \
+        --self-contained false \
+        -p:PublishSingleFile=true \
+        -p:DebugType=embedded \
+        -o ${wrksrc}/publish
+}
+
+do_install() {
+    # Install the published binary + assets
+    vmkdir usr/lib/divamodmanager
+    vcopy ${wrksrc}/publish/* usr/lib/divamodmanager/
+
+    # Wrapper script that sets DOTNET_ROOT for the user
+    vmkdir usr/bin
+    vinstall ${FILESDIR}/divamodmanager.sh 0755 usr/bin divamodmanager
+
+    # Desktop entry
+    vmkdir usr/share/applications
+    vinstall ${FILESDIR}/divamodmanager.desktop 0644 usr/share/applications
+
+    # MIME handler for divamodmanager:// 1-click install URLs
+    vmkdir usr/share/mime/packages
+    vinstall ${FILESDIR}/divamodmanager.xml 0644 usr/share/mime/packages
+
+    # Icons
+    vmkdir usr/share/icons/hicolor/256x256/apps
+    vinstall ${FILESDIR}/divamodmanager.png 0644 usr/share/icons/hicolor/256x256/apps
+
+    # License
+    vlicense DivaModManager/LICENSE
+}
+
+post_install() {
+    # Register the MIME type and update desktop database
+    echo "Run 'xbps-install -u' to refresh desktop + mime databases."
+}

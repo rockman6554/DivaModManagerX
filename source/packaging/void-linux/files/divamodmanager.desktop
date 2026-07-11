@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Diva Mod Manager
+GenericName=Project DIVA Mega Mix+ Mod Manager
+Comment=Download, install and manage mods for Hatsune Miku: Project DIVA Mega Mix+ (Linux port)
+Exec=/usr/bin/divamodmanager %U
+Icon=divamodmanager
+Terminal=false
+Categories=Game;Utility;
+StartupWMClass=DivaModManager
+StartupNotify=true
+
+# Register the divamodmanager:// URL scheme for GameBanana 1-click install
+MimeType=x-scheme-handler/divamodmanager;
