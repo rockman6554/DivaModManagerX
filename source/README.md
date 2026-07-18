@@ -1,4 +1,4 @@
-# DivaModManager — Linux Port (v1.3.1)
+# DivaModManager X (v1.3.1)
 
 Native Avalonia UI port of TekkaGB's DivaModManager for Void Linux + Steam Proton.
 

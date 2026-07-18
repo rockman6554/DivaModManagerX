@@ -102,7 +102,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     private void Initialize()
     {
-        Global.logger.WriteLine($"Launched Diva Mod Manager (Linux port) v1.3.1!", LoggerType.Info);
+        Global.logger.WriteLine($"Launched DivaModManager X v1.3.1!", LoggerType.Info);
         Global.logger.WriteLine("Sandbox note: build environment is Debian 13; target distro is Void Linux.", LoggerType.Info);
 
         var cfg = Global.config!;

@@ -48,54 +48,95 @@ namespace DivaModManager.Services
 
         public async Task<List<GameBananaRecord>> FetchRecordsAsync(string gameId, int page = 1, int perPage = 20, string? search = null)
         {
-            // Try apiv4 first — returns an ARRAY of records directly
+            // Step 1: Get the list of mod IDs via the Core API (most reliable from any network).
+            // The apiv4/apiv6 /Mod/Index endpoints return stub records (only _sName + _aCategory,
+            // no _aPreviewMedia / _aSubmitter / _aFiles / _tsDateAdded) which is why thumbnails
+            // were broken. The Core API returns [["Mod", 12345], ...] — just IDs, but it always works.
+            List<int> modIds;
             try
             {
-                var url = $"https://gamebanana.com/apiv4/Mod/Index?_aFilters[Generic_Game]={gameId}" +
-                          $"&_nPage={page}&_nPerpage={perPage}&_sSort=default";
+                var listUrl = $"https://api.gamebanana.com/Core/List/New?itemtype=Mod&gameid={gameId}&page={page}";
                 if (!string.IsNullOrEmpty(search))
-                    url += $"&_sName={Uri.EscapeDataString(search)}";
-
-                var json = await _http.GetStringAsync(url);
-                if (!string.IsNullOrEmpty(json))
                 {
-                    using var doc = JsonDocument.Parse(json);
-                    var records = new List<GameBananaRecord>();
-
-                    // apiv4 returns an array at the root
-                    if (doc.RootElement.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var r in doc.RootElement.EnumerateArray())
-                        {
-                            var record = JsonSerializer.Deserialize<GameBananaRecord>(r.GetRawText());
-                            if (record != null) records.Add(record);
-                        }
-                    }
-                    // Some endpoints wrap in {_aRecords: [...]} — handle both
-                    else if (doc.RootElement.ValueKind == JsonValueKind.Object &&
-                             doc.RootElement.TryGetProperty("_aRecords", out var arr))
-                    {
-                        foreach (var r in arr.EnumerateArray())
-                        {
-                            var record = JsonSerializer.Deserialize<GameBananaRecord>(r.GetRawText());
-                            if (record != null) records.Add(record);
-                        }
-                    }
-
-                    if (records.Count > 0) return records;
+                    // Core API search uses a different endpoint
+                    listUrl = $"https://api.gamebanana.com/Core/List/Data?itemtype=Mod&gameid={gameId}&page={page}" +
+                              $"&fields=name&where={Uri.EscapeDataString(search)}";
+                }
+                var listJson = await _http.GetStringAsync(listUrl);
+                using var listDoc = JsonDocument.Parse(listJson);
+                modIds = new List<int>();
+                foreach (var entry in listDoc.RootElement.EnumerateArray())
+                {
+                    if (entry.ValueKind == JsonValueKind.Array && entry.GetArrayLength() >= 2 && entry[1].TryGetInt32(out var id))
+                        modIds.Add(id);
+                    if (modIds.Count >= perPage) break;
                 }
             }
             catch (Exception ex)
             {
-                Global.logger?.WriteLine($"GameBanana apiv4 list fetch failed ({ex.Message}), falling back to Core API...", LoggerType.Warning);
+                Global.logger?.WriteLine($"GameBanana list fetch failed: {ex.Message}", LoggerType.Error);
+                return new();
             }
 
-            // Fallback: legacy Core API
-            return await FetchRecordsLegacyAsync(gameId, page, perPage);
+            if (modIds.Count == 0) return new();
+
+            // Step 2: Batch-fetch full data for each mod via apiv6 single-item endpoint.
+            // apiv6 returns full records including _aPreviewMedia, _aSubmitter, _aFiles, etc.
+            // We parallelize with a small concurrency limit to keep latency reasonable.
+            var records = new List<GameBananaRecord>();
+            var semaphore = new SemaphoreSlim(4, 4); // limit concurrent fetches
+            var tasks = modIds.Select(async id =>
+            {
+                await semaphore.WaitAsync();
+                try
+                {
+                    return await FetchRecordViaApiv6Async(id);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+            var results = await Task.WhenAll(tasks);
+            foreach (var r in results)
+            {
+                if (r != null) records.Add(r);
+            }
+
+            // Sort by date added descending (newest first) to match the Index endpoint's default sort
+            records.Sort((a, b) => b.DateAddedLong.CompareTo(a.DateAddedLong));
+            return records;
+        }
+
+        /// <summary>
+        /// Fetch a single mod via apiv6 (the modern endpoint that returns full data).
+        /// Deserializes directly as GameBananaRecord (which has all the right JSON mappings).
+        /// </summary>
+        private async Task<GameBananaRecord?> FetchRecordViaApiv6Async(int modId)
+        {
+            try
+            {
+                var url = $"https://gamebanana.com/apiv6/Mod/{modId}" +
+                          "?_csvProperties=_sName,_sProfileUrl,_aPreviewMedia,_sDescription," +
+                          "_aSubmitter,_aCategory,_aRootCategory,_aFiles,_tsDateAdded,_tsDateModified," +
+                          "_nViewCount,_nLikeCount,_nDownloadCount,_aAlternateFileSources";
+                var json = await _http.GetStringAsync(url);
+                // Deserialize directly as GameBananaRecord — the model already has all the
+                // right [JsonPropertyName] attributes for _sName, _aPreviewMedia, _aSubmitter,
+                // _aFiles, _tsDateAdded, _nViewCount, _nLikeCount, _nDownloadCount, etc.
+                var record = JsonSerializer.Deserialize<GameBananaRecord>(json);
+                return record;
+            }
+            catch (Exception ex)
+            {
+                Global.logger?.WriteLine($"GameBanana apiv6 fetch for {modId} failed: {ex.Message}", LoggerType.Warning);
+                return null;
+            }
         }
 
         private async Task<List<GameBananaRecord>> FetchRecordsLegacyAsync(string gameId, int page, int perPage)
         {
+            // Legacy fallback using Core/Item/Data — kept for emergency use if apiv6 goes down.
             try
             {
                 var listUrl = $"https://api.gamebanana.com/Core/List/New?itemtype=Mod&gameid={gameId}&page={page}";
@@ -112,7 +153,6 @@ namespace DivaModManager.Services
                 var records = new List<GameBananaRecord>();
                 foreach (var id in modIds)
                 {
-                    // Use the Core/Item/Data endpoint (NOT apiv4) for the fallback
                     var record = await FetchRecordViaCoreApiAsync(id);
                     if (record != null) records.Add(record);
                 }
