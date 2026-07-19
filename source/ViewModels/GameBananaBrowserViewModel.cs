@@ -24,17 +24,12 @@ public partial class GameBananaRecordViewModel : ObservableObject
     {
         get
         {
-            try
-            {
-                if (Record.Media != null && Record.Media.Count > 0)
-                {
-                    var img = Record.Media.FirstOrDefault(m => m?.Type == "image");
-                    if (img != null && img.Base != null && img.File != null)
-                        return new Uri(img.Base, img.File).ToString();
-                }
-            }
-            catch { }
-            return null;
+            // Use the GameBananaImage.ThumbnailUrl helper — it picks the smallest available
+            // variant (220px if present, falls back to full size) and constructs the URL
+            // via string concat (NOT new Uri(base, file) which has a known bug where
+            // base URLs not ending in '/' lose their last path segment).
+            var firstImage = Record.Media?.FirstOrDefault(m => m?.Type == "image");
+            return firstImage?.ThumbnailUrl;
         }
     }
 

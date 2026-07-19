@@ -88,9 +88,15 @@ namespace DivaModManager.Models
         [JsonPropertyName("_sProfileUrl")]
         public Uri? Link { get; set; }
         [JsonIgnore]
-        public Uri Image => Media != null && Media.Where(x => x.Type == "image").ToList().Count > 0
-            ? new Uri($"{Media[0].Base}/{Media[0].File}")
-            : new Uri("https://images.gamebanana.com/static/img/DefaultEmbeddables/Sound.jpg");
+        public Uri Image
+        {
+            get
+            {
+                var firstImage = Media?.FirstOrDefault(x => x?.Type == "image");
+                var url = firstImage?.FullImageUrl ?? "https://images.gamebanana.com/static/img/DefaultEmbeddables/Sound.jpg";
+                return Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri : new Uri("https://images.gamebanana.com/static/img/DefaultEmbeddables/Sound.jpg");
+            }
+        }
         [JsonPropertyName("_aPreviewMedia")]
         public List<GameBananaImage>? Media { get; set; }
         [JsonPropertyName("_sDescription")]
@@ -198,9 +204,15 @@ namespace DivaModManager.Models
         [JsonIgnore]
         public bool HasAltLinks => AlternateFileSources != null;
         [JsonIgnore]
-        public Uri Image => Media != null && Media.Where(x => x.Type == "image").ToList().Count > 0
-            ? new Uri($"{Media[0].Base}/{Media[0].File}")
-            : new Uri("https://images.gamebanana.com/static/img/DefaultEmbeddables/Sound.jpg");
+        public Uri Image
+        {
+            get
+            {
+                var firstImage = Media?.FirstOrDefault(x => x?.Type == "image");
+                var url = firstImage?.FullImageUrl ?? "https://images.gamebanana.com/static/img/DefaultEmbeddables/Sound.jpg";
+                return Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri : new Uri("https://images.gamebanana.com/static/img/DefaultEmbeddables/Sound.jpg");
+            }
+        }
         [JsonPropertyName("_aPreviewMedia")]
         public List<GameBananaImage>? Media { get; set; }
         [JsonPropertyName("_sDescription")]
@@ -302,10 +314,55 @@ namespace DivaModManager.Models
         [JsonPropertyName("_sUrl")]
         public Uri? Audio { get; set; }
         [JsonPropertyName("_sBaseUrl")]
-        public Uri? Base { get; set; }
+        public string? Base { get; set; }
         [JsonPropertyName("_sFile")]
-        public Uri? File { get; set; }
+        public string? File { get; set; }
+        // Smaller thumbnail variants — _sFile220 is 220px wide, ideal for list display (~11KB vs ~300KB)
+        [JsonPropertyName("_sFile220")]
+        public string? File220 { get; set; }
+        [JsonPropertyName("_sFile530")]
+        public string? File530 { get; set; }
+        [JsonPropertyName("_sFile100")]
+        public string? File100 { get; set; }
         [JsonPropertyName("_sCaption")]
         public string? Caption { get; set; }
+
+        /// <summary>
+        /// Returns the smallest available thumbnail URL (prefer _sFile220 for list display).
+        /// Falls back to _sFile (full size) if no thumbnail variant exists.
+        /// Returns null if Base or any File variant is missing.
+        ///
+        /// IMPORTANT: We use string concatenation ($"{Base}/{File}") instead of
+        /// `new Uri(baseUri, relativeUri)` because the Uri constructor treats the base
+        /// as a file path (not a directory) when it doesn't end with '/', causing
+        /// the last path segment to be replaced. String concat is the correct approach.
+        /// </summary>
+        [JsonIgnore]
+        public string? ThumbnailUrl
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(Base)) return null;
+                // Prefer 220px thumbnail (smallest, fastest to load)
+                if (!string.IsNullOrEmpty(File220)) return $"{Base}/{File220}";
+                if (!string.IsNullOrEmpty(File100)) return $"{Base}/{File100}";
+                if (!string.IsNullOrEmpty(File530)) return $"{Base}/{File530}";
+                if (!string.IsNullOrEmpty(File)) return $"{Base}/{File}";
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Full-size image URL (for the detail panel).
+        /// </summary>
+        [JsonIgnore]
+        public string? FullImageUrl
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(Base) || string.IsNullOrEmpty(File)) return null;
+                return $"{Base}/{File}";
+            }
+        }
     }
 }

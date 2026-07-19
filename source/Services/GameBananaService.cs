@@ -207,16 +207,21 @@ namespace DivaModManager.Services
                     DateUpdatedLong = arr.Count > 10 && arr[10].ValueKind == JsonValueKind.Number ? arr[10].GetInt64() : 0,
                 };
 
-                // Preview image
+                // Preview image — Core API returns the full URL directly via Preview().sStructuredDataFullsizeUrl()
+                // Split it into Base + File for compatibility with the GameBananaImage model
                 if (arr[2].ValueKind == JsonValueKind.String && Uri.TryCreate(arr[2].GetString(), UriKind.Absolute, out var prev))
                 {
-                    var pathPart = prev.GetLeftPart(UriPartial.Path);
-                    var baseUri = new Uri(pathPart.Substring(0, pathPart.LastIndexOf('/') + 1));
-                    var filePart = Uri.UnescapeDataString(prev.Segments.Last());
-                    record.Media = new List<GameBananaImage>
+                    var fullUrl = prev.ToString();
+                    var lastSlash = fullUrl.LastIndexOf('/');
+                    if (lastSlash > 0 && lastSlash < fullUrl.Length - 1)
                     {
-                        new() { Type = "image", Base = baseUri, File = new Uri(filePart, UriKind.Relative) }
-                    };
+                        var baseStr = fullUrl.Substring(0, lastSlash);
+                        var fileStr = fullUrl.Substring(lastSlash + 1);
+                        record.Media = new List<GameBananaImage>
+                        {
+                            new() { Type = "image", Base = baseStr, File = fileStr }
+                        };
+                    }
                 }
 
                 // Files
