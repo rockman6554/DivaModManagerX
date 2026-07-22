@@ -284,33 +284,28 @@ public partial class MainWindowViewModel : ObservableObject
         {
             var msg = "Cannot launch:\n\n" + string.Join("\n", failures);
             if (fixes.Any(f => f.Contains("Auto-configure")))
-                msg += "\n\nDo you want DMM to auto-configure Steam launch options now? (Steam will need to be restarted.)";
+                msg += "\n\nThe Steam launch option has been copied to your clipboard. Paste it into Steam → Properties → Launch Options, then relaunch.";
             Global.logger.WriteLine(msg, LoggerType.Error);
-            // Try auto-config if that's the only fix
+            // If Steam launch options are the only blocker, copy the override to the clipboard
+            // so the user can paste it into Steam's Launch Options field manually.
             if (fixes.Any(f => f.Contains("Auto-configure")) &&
                 !failures.Any(f => f.Contains("dinput8.dll") || f.Contains("config.toml")))
             {
-                var configured = _launch.AutoConfigureSteam();
-                if (configured)
+                var text = $"{SteamLaunchOptionsService.RequiredWineOverride} %command%";
+                var session = Helpers.ClipboardHelper.IsWaylandSession() ? "Wayland" : "X11";
+                var copied = await Helpers.ClipboardHelper.CopyAsync(text);
+                if (copied)
                 {
-                    var (ok2, _, _) = _launch.VerifyLaunch(gameCfg.Launcher);
-                    if (!ok2)
-                    {
-                        Global.logger.WriteLine("Steam configured but other issues remain. See log above.", LoggerType.Warning);
-                        return;
-                    }
-                    SteamStatus = "Configured (restart Steam to apply)";
+                    Global.logger.WriteLine($"Copied launch option to clipboard ({session}): {text}", LoggerType.Info);
+                    Global.logger.WriteLine("Paste it into Steam → Properties → Launch Options, then relaunch.", LoggerType.Warning);
+                    SteamStatus = "Copied — paste in Steam Launch Options";
                 }
                 else
                 {
-                    Global.logger.WriteLine("Auto-config failed. Set the launch option manually in Steam: WINEDLLOVERRIDES=\"dinput8.dll=n,b\" %command%", LoggerType.Error);
-                    return;
+                    Global.logger.WriteLine($"Set the launch option manually: {text}", LoggerType.Error);
                 }
             }
-            else
-            {
-                return;
-            }
+            return;
         }
 
         _launch.LaunchViaSteam();
@@ -451,13 +446,32 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ConfigureSteam()
+    private async Task ConfigureSteamAsync()
     {
-        var ok = _launch.AutoConfigureSteam();
+        // Copy the WINEDLLOVERRIDES launch option to the clipboard so the user can paste it
+        // into Steam's per-game Properties → Launch Options field.
+        //
+        // Why clipboard instead of auto-writing localconfig.vdf:
+        //   Steam caches localconfig.vdf in memory and overwrites it on exit, so writing it
+        //   while Steam is running is silently lost. Bubblewrap-sandboxed Steam installs (e.g.
+        //   Void's steam-nk) put the file behind a mount that the manager process can't always
+        //   reach. Letting the user paste it via Steam's own UI is the only reliable flow.
+        var text = $"{SteamLaunchOptionsService.RequiredWineOverride} %command%";
+        var session = Helpers.ClipboardHelper.IsWaylandSession() ? "Wayland" : "X11";
+
+        var ok = await Helpers.ClipboardHelper.CopyAsync(text);
         if (ok)
         {
-            var (found, _, _) = _steamOpts.CheckLaunchOptions();
-            SteamStatus = found ? "Configured (restart Steam to apply)" : "NOT configured";
+            Global.logger.WriteLine($"Copied launch option to clipboard ({session}):", LoggerType.Info);
+            Global.logger.WriteLine($"    {text}", LoggerType.Info);
+            Global.logger.WriteLine("In Steam: right-click the game → Properties → Launch Options → paste.", LoggerType.Info);
+            SteamStatus = "Copied — paste in Steam Launch Options";
+        }
+        else
+        {
+            Global.logger.WriteLine("Could not access the clipboard. Set the launch option manually:", LoggerType.Error);
+            Global.logger.WriteLine($"    {text}", LoggerType.Info);
+            SteamStatus = "Clipboard unavailable — set manually";
         }
     }
 

@@ -116,8 +116,8 @@
                         <StackPanel Spacing="4">
                             <TextBlock Text="Steam Launch Status" Classes="header"/>
                             <TextBlock Text="{Binding SteamStatus}" TextWrapping="Wrap" FontSize="11"/>
-                            <Button Content="Configure Steam" Command="{Binding ConfigureSteamCommand}" Margin="0,4,0,0" HorizontalAlignment="Stretch"
-                                    ToolTip.Tip="Auto-write WINEDLLOVERRIDES=dinput8.dll=n,b to Steam's launch options"/>
+                            <Button Content="Copy Steam Launch Option" Command="{Binding ConfigureSteamCommand}" Margin="0,4,0,0" HorizontalAlignment="Stretch"
+                                    ToolTip.Tip="Copy WINEDLLOVERRIDES=dinput8.dll=n,b to the clipboard so you can paste it into Steam → Properties → Launch Options"/>
                         </StackPanel>
                     </Border>
 

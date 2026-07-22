@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace DivaModManager.Models
@@ -44,8 +45,11 @@ namespace DivaModManager.Models
         public string LikeString => Helpers.StringConverters.FormatNumber(Likes);
         [JsonPropertyName("authors")]
         public List<DivaModArchiveUser>? Authors { get; set; }
+        // The DMA API returns dependencies as a list of nested post objects (not IDs).
+        // We don't use this field, so we accept any JsonElement to avoid deserialization
+        // failures when the nested posts have their own complex schema.
         [JsonPropertyName("dependencies")]
-        public List<int>? Dependencies { get; set; }
+        public List<JsonElement>? Dependencies { get; set; }
         [JsonPropertyName("explicit")]
         public bool Explicit { get; set; }
     }

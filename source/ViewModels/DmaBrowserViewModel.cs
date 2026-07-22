@@ -66,7 +66,17 @@ public partial class DmaBrowserViewModel : ObservableObject
     [ObservableProperty] private string _selectedDetail = "Select a mod to see details.";
 
     public bool CanGoPrev => _page > 1;
-    public bool CanGoNext => Posts.Count >= _perPage;
+    public bool CanGoNext => _page < _totalPages;
+    private int _totalPages = 1;
+    public int TotalPages
+    {
+        get => _totalPages;
+        private set
+        {
+            if (SetProperty(ref _totalPages, value))
+                OnPropertyChanged(nameof(CanGoNext));
+        }
+    }
 
     public event Action<string, float, long, long>? DownloadProgress;
     public event Action? InstallComplete;
@@ -139,11 +149,14 @@ public partial class DmaBrowserViewModel : ObservableObject
         {
             var sort = (DmaFeedSort)SelectedSortIndex;
             var filter = (DmaFeedFilter)SelectedFilterIndex;
-            var posts = await _dma.FetchFeedAsync(_page, _perPage, sort, filter, SearchQuery);
+            var feed = await _dma.FetchFeedAsync(_page, _perPage, sort, filter, SearchQuery);
             if (token.IsCancellationRequested) return;
-            foreach (var p in posts)
+            TotalPages = feed.TotalPages > 0 ? feed.TotalPages : 1;
+            foreach (var p in feed.Posts)
                 Posts.Add(new DmaPostViewModel(p));
-            ResultCount = $"{Posts.Count} mods on this page";
+            ResultCount = feed.TotalRecords > 0
+                ? $"{feed.TotalRecords} mods total — page {_page} of {TotalPages}"
+                : $"{Posts.Count} mods on this page";
         }
         catch (OperationCanceledException) { return; }
         catch (Exception ex)

@@ -55,7 +55,7 @@ public partial class GameBananaBrowserViewModel : ObservableObject
     [ObservableProperty] private string _selectedDetail = "Select a mod to see details.";
 
     public bool CanGoPrev => _page > 1;
-    public bool CanGoNext => Records.Count >= _perPage;
+    public bool CanGoNext => _page < _totalPages;
 
     public event Action<string, float, long, long>? DownloadProgress;
     public event Action? InstallComplete;
@@ -119,6 +119,17 @@ public partial class GameBananaBrowserViewModel : ObservableObject
         await LoadAsync();
     }
 
+    private int _totalPages = 1;
+    public int TotalPages
+    {
+        get => _totalPages;
+        private set
+        {
+            if (SetProperty(ref _totalPages, value))
+                OnPropertyChanged(nameof(CanGoNext));
+        }
+    }
+
     private async Task LoadAsync()
     {
         IsLoading = true;
@@ -127,11 +138,14 @@ public partial class GameBananaBrowserViewModel : ObservableObject
         var token = _loadCts.Token;
         try
         {
-            var records = await _gb.FetchRecordsAsync(GameBananaService.MegaMixGameId, _page, _perPage, SearchQuery);
+            var feed = await _gb.FetchRecordsAsync(GameBananaService.MegaMixGameId, _page, _perPage, SearchQuery);
             if (token.IsCancellationRequested) return;
-            foreach (var r in records)
+            TotalPages = feed.TotalPages > 0 ? feed.TotalPages : 1;
+            foreach (var r in feed.Records)
                 Records.Add(new GameBananaRecordViewModel(r));
-            ResultCount = $"{Records.Count} mods on this page";
+            ResultCount = feed.TotalRecords > 0
+                ? $"{feed.TotalRecords} mods total — page {_page} of {TotalPages}"
+                : $"{Records.Count} mods on this page";
         }
         catch (OperationCanceledException) { return; }
         catch (Exception ex)

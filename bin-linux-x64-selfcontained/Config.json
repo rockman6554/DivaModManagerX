@@ -2,143 +2,31 @@
   "CurrentGame": "Project DIVA Mega Mix\u002B",
   "Configs": {
     "Project DIVA Mega Mix\u002B": {
-      "Launcher": "/home/damper/Hatsune Miku Project DIVA Mega Mix Plus/DivaMegaMix.exe",
-      "GamePath": "/home/damper/Hatsune Miku Project DIVA Mega Mix Plus",
+      "Launcher": "/home/crow/.steam/steam/steamapps/common/Hatsune Miku Project DIVA Mega Mix Plus/DivaMegaMix.exe",
+      "GamePath": "/home/crow/.steam/steam/steamapps/common/Hatsune Miku Project DIVA Mega Mix Plus",
       "LauncherOption": false,
       "LauncherOptionIndex": 0,
       "LauncherOptionConverted": false,
       "FirstOpen": false,
-      "ModsFolder": "/home/damper/Hatsune Miku Project DIVA Mega Mix Plus/mods",
+      "ModsFolder": "/home/crow/.steam/steam/steamapps/common/Hatsune Miku Project DIVA Mega Mix Plus/mods",
       "ModLoaderVersion": "0.0.16",
       "CurrentLoadout": "Default",
       "Loadouts": {
         "Default": [
           {
-            "name": "Better ADPS",
+            "name": "#Kasane Teto Supremacy Pack1.1",
             "enabled": true
           },
           {
-            "name": "CubesLightingMod",
+            "name": "-Execution clap Module-",
             "enabled": true
           },
           {
-            "name": "Disable Watermarks",
+            "name": "Teto is Sleepy",
             "enabled": true
           },
           {
-            "name": "DivaNoSpy",
-            "enabled": true
-          },
-          {
-            "name": "F2nd Song Pack",
-            "enabled": true
-          },
-          {
-            "name": "High Frame Rate",
-            "enabled": true
-          },
-          {
-            "name": "Remove Toon Shader",
-            "enabled": true
-          },
-          {
-            "name": "Remove Toon Shader F2nd",
-            "enabled": true
-          },
-          {
-            "name": "SongLimitPatch",
-            "enabled": true
-          },
-          {
-            "name": "Vocaloids sing SEGA \u002B",
-            "enabled": true
-          },
-          {
-            "name": "Zatsune Miku (Classic)",
-            "enabled": true
-          },
-          {
-            "name": "Zatsune Miku (Modern)",
-            "enabled": true
-          },
-          {
-            "name": "arv\u0027s improved lipsync mod Ver4",
-            "enabled": true
-          },
-          {
-            "name": "Discordiva",
-            "enabled": true
-          },
-          {
-            "name": "Zatsudayo and Zatsunano Module Pack",
-            "enabled": true
-          },
-          {
-            "name": "Future Tone Customization",
-            "enabled": true
-          },
-          {
-            "name": "Miku Menu Replace",
-            "enabled": true
-          },
-          {
-            "name": "Restore CRT Off SE",
-            "enabled": true
-          },
-          {
-            "name": "Title Screen Voice Announcement",
-            "enabled": true
-          },
-          {
-            "name": "JP Judgements",
-            "enabled": true
-          },
-          {
-            "name": "#DECORATOR-RIFE",
-            "enabled": true
-          },
-          {
-            "name": "Catch the Wave Expression and Future Tone Lighting Fix",
-            "enabled": true
-          },
-          {
-            "name": "CtW No-Toon Shader F2nd Compatible",
-            "enabled": true
-          },
-          {
-            "name": "DivaBackup",
-            "enabled": true
-          },
-          {
-            "name": "Love is War -Light Mod-",
-            "enabled": true
-          },
-          {
-            "name": "Original 2D effect \u002B song logo for LIKE THE WIND",
-            "enabled": true
-          },
-          {
-            "name": "Rin-Chan now eyebrow fix",
-            "enabled": true
-          },
-          {
-            "name": "Secret Garden Fade Effect",
-            "enabled": true
-          },
-          {
-            "name": "Green Liquid Restoration for Envy Cat Walk",
-            "enabled": true
-          },
-          {
-            "name": "HIBANA - Eye Alignment Fix",
-            "enabled": true
-          },
-          {
-            "name": "Missing Edit PVBack Stages",
-            "enabled": true
-          },
-          {
-            "name": "Moyai Restoration",
+            "name": "VOICEPEAK TETO",
             "enabled": true
           }
         ]
@@ -149,7 +37,7 @@
   "RightGridWidth": 1,
   "TopGridHeight": 1.6,
   "BottomGridHeight": 1,
-  "Height": 750,
+  "Height": 690,
   "Width": 1280,
   "Maximized": false
 }
