@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -13,17 +14,20 @@ using DivaModManager.Helpers;
 namespace DivaModManager.Services
 {
     /// <summary>
-    /// GameBanana API client.
+    /// GameBanana API client — replicates the upstream TekkaGB DivaModManager search
+    /// strategy from <c>FeedGenerator.cs</c>.
     ///
-    /// API versions:
-    ///   - apiv4 (modern): /apiv4/Mod/Index returns an ARRAY of records directly.
-    ///                     /apiv4/Mod/{id}?_csvProperties=... returns a single object.
-    ///                     Valid csvProperties include: _sName, _sProfileUrl, _aPreviewMedia,
-    ///                     _aSubmitter, _aFiles, _tsDateAdded, _aGame, _aCategory, _sDescription.
-    ///                     INVALID (cause 400): _aRootCategory, _aAlternateFileSources,
-    ///                     _bHasUpdates, _aLatestUpdates.
-    ///   - Core (legacy):  /Core/List/New returns [["Mod", 12345], ...] (type+ID pairs).
-    ///                     /Core/Item/Data?fields=name,Files().aFiles() returns field values.
+    /// We use the apiv6 list endpoints which filter SERVER-SIDE by game and (optionally)
+    /// by name. This means ONE HTTP request per page navigation instead of the hundreds
+    /// of per-mod fan-out requests the previous implementation did (which tripped
+    /// Cloudflare's HTTP 429 rate limit).
+    ///
+    ///   - Browse (no query): GET /apiv6/Mod/ByGame?_aGameRowIds[]=16522&...
+    ///   - Search (query):    GET /apiv6/Mod/ByName?_sName=*{query}*&_idGameRow=16522&...
+    ///
+    /// The server returns full records (name, submitter, files, media, dates, counts)
+    /// in a single response. The total record count is read from the response header
+    /// <c>X-GbApi-Metadata_nRecordCount</c> for accurate pagination.
     ///
     /// Game ID for Project DIVA Mega Mix+ is 16522.
     /// </summary>
@@ -46,227 +50,133 @@ namespace DivaModManager.Services
 
         public event Action<string, float, long, long>? DownloadProgress;
 
-        public async Task<List<GameBananaRecord>> FetchRecordsAsync(string gameId, int page = 1, int perPage = 20, string? search = null)
+        /// <summary>
+        /// Result of a feed fetch. Carries the records plus pagination metadata
+        /// read from the <c>X-GbApi-Metadata_nRecordCount</c> response header.
+        /// </summary>
+        public class FeedResult
         {
-            // Step 1: Get the list of mod IDs via the Core API (most reliable from any network).
-            // The apiv4/apiv6 /Mod/Index endpoints return stub records (only _sName + _aCategory,
-            // no _aPreviewMedia / _aSubmitter / _aFiles / _tsDateAdded) which is why thumbnails
-            // were broken. The Core API returns [["Mod", 12345], ...] — just IDs, but it always works.
-            List<int> modIds;
+            public List<GameBananaRecord> Records { get; set; } = new();
+            public int TotalRecords { get; set; }
+            public int TotalPages { get; set; }
+        }
+
+        // ---- Feed cache (15-minute TTL, LRU capped at 15 entries — mirrors upstream) ----
+        private static readonly Dictionary<string, GameBananaModList> _feedCache = new();
+        private static readonly object _cacheLock = new();
+
+        /// <summary>
+        /// Fetch one page of mods for the Mega Mix+ game, optionally filtered by name.
+        /// Issues exactly ONE HTTP request (or zero on cache hit).
+        /// </summary>
+        public async Task<FeedResult> FetchRecordsAsync(string gameId, int page = 1, int perPage = 20, string? search = null)
+        {
+            var url = BuildFeedUrl(gameId, page, perPage, search);
+
+            // Cache check
+            lock (_cacheLock)
+            {
+                if (_feedCache.TryGetValue(url, out var cached) && cached.IsValid)
+                {
+                    return new FeedResult
+                    {
+                        Records = cached.Records?.ToList() ?? new(),
+                        TotalPages = (int)cached.TotalPages
+                    };
+                }
+            }
+
             try
             {
-                var listUrl = $"https://api.gamebanana.com/Core/List/New?itemtype=Mod&gameid={gameId}&page={page}";
-                if (!string.IsNullOrEmpty(search))
+                Global.logger?.WriteLine($"[GB] Fetching: {url.Substring(0, Math.Min(120, url.Length))}...", LoggerType.Info);
+                using var resp = await _http.GetAsync(url);
+                Global.logger?.WriteLine($"[GB] Status: {(int)resp.StatusCode} {resp.StatusCode}", LoggerType.Info);
+                resp.EnsureSuccessStatusCode();
+
+                var json = await resp.Content.ReadAsStringAsync();
+                Global.logger?.WriteLine($"[GB] Response: {json.Length} chars", LoggerType.Info);
+                var records = JsonSerializer.Deserialize<List<GameBananaRecord>>(json) ?? new();
+                Global.logger?.WriteLine($"[GB] Deserialized: {records.Count} records", LoggerType.Info);
+
+                // Parse total record count from metadata header
+                var totalRecords = 0;
+                if (resp.Headers.TryGetValues("X-GbApi-Metadata_nRecordCount", out var values))
                 {
-                    // Core API search uses a different endpoint
-                    listUrl = $"https://api.gamebanana.com/Core/List/Data?itemtype=Mod&gameid={gameId}&page={page}" +
-                              $"&fields=name&where={Uri.EscapeDataString(search)}";
+                    var headerVal = values.FirstOrDefault();
+                    if (headerVal != null && int.TryParse(headerVal, out var tr)) totalRecords = tr;
                 }
-                var listJson = await _http.GetStringAsync(listUrl);
-                using var listDoc = JsonDocument.Parse(listJson);
-                modIds = new List<int>();
-                foreach (var entry in listDoc.RootElement.EnumerateArray())
+                var totalPages = perPage > 0 ? (int)Math.Ceiling(totalRecords / (double)perPage) : 1;
+                if (totalPages < 1) totalPages = records.Count > 0 ? page : 1;
+
+                // Store in cache
+                var entry = new GameBananaModList
                 {
-                    if (entry.ValueKind == JsonValueKind.Array && entry.GetArrayLength() >= 2 && entry[1].TryGetInt32(out var id))
-                        modIds.Add(id);
-                    if (modIds.Count >= perPage) break;
+                    Records = new ObservableCollection<GameBananaRecord>(records),
+                    TotalPages = totalPages,
+                    TimeFetched = DateTime.UtcNow
+                };
+                lock (_cacheLock)
+                {
+                    if (_feedCache.Count >= 15)
+                    {
+                        // Evict the oldest entry (LRU-ish by fetch time)
+                        var oldest = _feedCache.OrderByDescending(k => k.Value.TimeFetched).Last();
+                        _feedCache.Remove(oldest.Key);
+                    }
+                    _feedCache[url] = entry;
                 }
+
+                return new FeedResult { Records = records, TotalRecords = totalRecords, TotalPages = totalPages };
             }
             catch (Exception ex)
             {
-                Global.logger?.WriteLine($"GameBanana list fetch failed: {ex.Message}", LoggerType.Error);
-                return new();
+                Global.logger?.WriteLine($"[GB] feed fetch FAILED: {ex.GetType().Name}: {ex.Message}", LoggerType.Error);
+                return new FeedResult();
             }
+        }
 
-            if (modIds.Count == 0) return new();
+        /// <summary>
+        /// Build the apiv6 feed URL. Replicates <c>FeedGenerator.GenerateUrl</c> from the
+        /// upstream TekkaGB DivaModManager.
+        /// </summary>
+        private static string BuildFeedUrl(string gameId, int page, int perPage, string? search)
+        {
+            var hasSearch = !string.IsNullOrWhiteSpace(search);
+            var url = hasSearch
+                ? $"https://gamebanana.com/apiv6/Mod/ByName?_sName=*{Uri.EscapeDataString(search!.Trim())}*&_idGameRow={gameId}&"
+                : $"https://gamebanana.com/apiv6/Mod/ByGame?_aGameRowIds[]={gameId}&";
 
-            // Step 2: Batch-fetch full data for each mod via apiv6 single-item endpoint.
-            // apiv6 returns full records including _aPreviewMedia, _aSubmitter, _aFiles, etc.
-            // We parallelize with a small concurrency limit to keep latency reasonable.
-            var records = new List<GameBananaRecord>();
-            var semaphore = new SemaphoreSlim(4, 4); // limit concurrent fetches
-            var tasks = modIds.Select(async id =>
-            {
-                await semaphore.WaitAsync();
-                try
-                {
-                    return await FetchRecordViaApiv6Async(id);
-                }
-                finally
-                {
-                    semaphore.Release();
-                }
-            });
-            var results = await Task.WhenAll(tasks);
-            foreach (var r in results)
-            {
-                if (r != null) records.Add(r);
-            }
-
-            // Sort by date added descending (newest first) to match the Index endpoint's default sort
-            records.Sort((a, b) => b.DateAddedLong.CompareTo(a.DateAddedLong));
-            return records;
+            url += "_csvProperties=_sName,_sModelName,_sProfileUrl,_aSubmitter,_tsDateUpdated,_tsDateAdded," +
+                   "_aPreviewMedia,_sText,_sDescription,_aCategory,_aRootCategory,_aGame," +
+                   "_nViewCount,_nLikeCount,_nDownloadCount,_aFiles,_aModManagerIntegrations," +
+                   "_bIsNsfw,_aAlternateFileSources";
+            url += $"&_nPerpage={perPage}";
+            // _aArgs value must be URL-encoded — it contains spaces ("_sbIsNsfw = false").
+            // Leaving it raw produces an invalid URI that HttpClient rejects (the request never
+            // reaches GameBanana and the catch returns an empty list — appearing as "no results").
+            url += $"&_aArgs[]={Uri.EscapeDataString("_sbIsNsfw = false")}"; // hide NSFW by default
+            url += "&_sOrderBy=_tsDateUpdated,DESC"; // sort by recent
+            url += $"&_nPage={page}";
+            return url;
         }
 
         /// <summary>
         /// Fetch a single mod via apiv6 (the modern endpoint that returns full data).
-        /// Deserializes directly as GameBananaRecord (which has all the right JSON mappings).
+        /// Used for 1-click install / "From URL" install.
         /// </summary>
-        private async Task<GameBananaRecord?> FetchRecordViaApiv6Async(int modId)
+        public async Task<GameBananaAPIV4?> FetchItemAsync(int modId)
         {
             try
             {
                 var url = $"https://gamebanana.com/apiv6/Mod/{modId}" +
-                          "?_csvProperties=_sName,_sProfileUrl,_aPreviewMedia,_sDescription," +
-                          "_aSubmitter,_aCategory,_aRootCategory,_aFiles,_tsDateAdded,_tsDateModified," +
-                          "_nViewCount,_nLikeCount,_nDownloadCount,_aAlternateFileSources";
-                var json = await _http.GetStringAsync(url);
-                // Deserialize directly as GameBananaRecord — the model already has all the
-                // right [JsonPropertyName] attributes for _sName, _aPreviewMedia, _aSubmitter,
-                // _aFiles, _tsDateAdded, _nViewCount, _nLikeCount, _nDownloadCount, etc.
-                var record = JsonSerializer.Deserialize<GameBananaRecord>(json);
-                return record;
-            }
-            catch (Exception ex)
-            {
-                Global.logger?.WriteLine($"GameBanana apiv6 fetch for {modId} failed: {ex.Message}", LoggerType.Warning);
-                return null;
-            }
-        }
-
-        private async Task<List<GameBananaRecord>> FetchRecordsLegacyAsync(string gameId, int page, int perPage)
-        {
-            // Legacy fallback using Core/Item/Data — kept for emergency use if apiv6 goes down.
-            try
-            {
-                var listUrl = $"https://api.gamebanana.com/Core/List/New?itemtype=Mod&gameid={gameId}&page={page}";
-                var listJson = await _http.GetStringAsync(listUrl);
-                using var listDoc = JsonDocument.Parse(listJson);
-                var modIds = new List<int>();
-                foreach (var entry in listDoc.RootElement.EnumerateArray())
-                {
-                    if (entry.GetArrayLength() >= 2 && entry[1].TryGetInt32(out var id))
-                        modIds.Add(id);
-                    if (modIds.Count >= perPage) break;
-                }
-
-                var records = new List<GameBananaRecord>();
-                foreach (var id in modIds)
-                {
-                    var record = await FetchRecordViaCoreApiAsync(id);
-                    if (record != null) records.Add(record);
-                }
-                return records;
-            }
-            catch (Exception ex)
-            {
-                Global.logger?.WriteLine($"GameBanana Core API fetch failed: {ex.Message}", LoggerType.Error);
-                return new();
-            }
-        }
-
-        /// <summary>
-        /// Fetch a single mod via the legacy Core/Item/Data endpoint.
-        /// Returns null on failure.
-        /// </summary>
-        private async Task<GameBananaRecord?> FetchRecordViaCoreApiAsync(int modId)
-        {
-            try
-            {
-                // Core API uses a different field format: comma-separated field names
-                // Valid fields: name, ProfileUrl, Preview().sStructuredDataFullsizeUrl(),
-                //               Files().aFiles(), Submitter().sName(), Submitter().sAvatarUrl(),
-                //               Category().sName(), Category().sIconUrl(), dateline
-                var url = $"https://api.gamebanana.com/Core/Item/Data?itemtype=Mod&itemid={modId}" +
-                          "&fields=name,ProfileUrl,Preview().sStructuredDataFullsizeUrl()," +
-                          "Files().aFiles(),Submitter().sName(),Submitter().sAvatarUrl()," +
-                          "Submitter().sUpicUrl(),Category().sName(),Category().sIconUrl(),dateline,updatedate";
-                var json = await _http.GetStringAsync(url);
-                using var doc = JsonDocument.Parse(json);
-
-                if (doc.RootElement.ValueKind != JsonValueKind.Array) return null;
-                var arr = doc.RootElement.EnumerateArray().ToList();
-                if (arr.Count < 10) return null;
-
-                var record = new GameBananaRecord
-                {
-                    Title = arr[0].ValueKind == JsonValueKind.String ? arr[0].GetString() : $"Mod {modId}",
-                    Link = arr[1].ValueKind == JsonValueKind.String ? new Uri(arr[1].GetString()!) : null,
-                    Owner = new GameBananaMember
-                    {
-                        Name = arr[4].ValueKind == JsonValueKind.String ? arr[4].GetString() : null,
-                        Avatar = arr[5].ValueKind == JsonValueKind.String && Uri.TryCreate(arr[5].GetString(), UriKind.Absolute, out var av) ? av : null,
-                        Upic = arr[6].ValueKind == JsonValueKind.String && Uri.TryCreate(arr[6].GetString(), UriKind.Absolute, out var up) ? up : null,
-                    },
-                    Category = new GameBananaCategory
-                    {
-                        Name = arr[7].ValueKind == JsonValueKind.String ? arr[7].GetString() : null,
-                        Icon = arr[8].ValueKind == JsonValueKind.String && Uri.TryCreate(arr[8].GetString(), UriKind.Absolute, out var ic) ? ic : null,
-                    },
-                    DateAddedLong = arr[9].ValueKind == JsonValueKind.Number ? arr[9].GetInt64() : 0,
-                    DateUpdatedLong = arr.Count > 10 && arr[10].ValueKind == JsonValueKind.Number ? arr[10].GetInt64() : 0,
-                };
-
-                // Preview image — Core API returns the full URL directly via Preview().sStructuredDataFullsizeUrl()
-                // Split it into Base + File for compatibility with the GameBananaImage model
-                if (arr[2].ValueKind == JsonValueKind.String && Uri.TryCreate(arr[2].GetString(), UriKind.Absolute, out var prev))
-                {
-                    var fullUrl = prev.ToString();
-                    var lastSlash = fullUrl.LastIndexOf('/');
-                    if (lastSlash > 0 && lastSlash < fullUrl.Length - 1)
-                    {
-                        var baseStr = fullUrl.Substring(0, lastSlash);
-                        var fileStr = fullUrl.Substring(lastSlash + 1);
-                        record.Media = new List<GameBananaImage>
-                        {
-                            new() { Type = "image", Base = baseStr, File = fileStr }
-                        };
-                    }
-                }
-
-                // Files
-                if (arr[3].ValueKind == JsonValueKind.Object)
-                {
-                    record.AllFiles = new List<GameBananaItemFile>();
-                    foreach (var fProp in arr[3].EnumerateObject())
-                    {
-                        var f = fProp.Value;
-                        if (f.ValueKind != JsonValueKind.Object) continue;
-                        var file = new GameBananaItemFile();
-                        if (f.TryGetProperty("_sFile", out var sf) && sf.ValueKind == JsonValueKind.String)
-                            file.FileName = sf.GetString();
-                        if (f.TryGetProperty("_nFilesize", out var ns) && ns.ValueKind == JsonValueKind.Number)
-                            file.Filesize = ns.GetInt64();
-                        if (f.TryGetProperty("_sDownloadUrl", out var sd) && sd.ValueKind == JsonValueKind.String)
-                            file.DownloadUrl = sd.GetString();
-                        if (f.TryGetProperty("_tsDateAdded", out var ts) && ts.ValueKind == JsonValueKind.Number)
-                            file.DateAddedLong = ts.GetInt64();
-                        record.AllFiles.Add(file);
-                    }
-                }
-
-                return record;
-            }
-            catch (Exception ex)
-            {
-                Global.logger?.WriteLine($"GameBanana Core item fetch for {modId} failed: {ex.Message}", LoggerType.Warning);
-                return null;
-            }
-        }
-
-        public async Task<GameBananaAPIV4?> FetchItemAsync(int modId)
-        {
-            // Use apiv4 with ONLY valid csvProperties (avoid 400 errors)
-            try
-            {
-                var url = $"https://gamebanana.com/apiv4/Mod/{modId}" +
-                          "?_csvProperties=_sName,_sProfileUrl,_aPreviewMedia,_sDescription,_aSubmitter,_aCategory,_aGame,_aFiles,_tsDateAdded,_tsDateModified";
+                          "?_csvProperties=_sName,_sProfileUrl,_aPreviewMedia,_sDescription,_aSubmitter," +
+                          "_aCategory,_aGame,_aFiles,_tsDateAdded,_tsDateModified,_aAlternateFileSources";
                 var json = await _http.GetStringAsync(url);
                 return JsonSerializer.Deserialize<GameBananaAPIV4>(json);
             }
             catch (Exception ex)
             {
-                Global.logger?.WriteLine($"GameBanana apiv4 item fetch failed: {ex.Message}", LoggerType.Warning);
+                Global.logger?.WriteLine($"GameBanana apiv6 item fetch failed: {ex.Message}", LoggerType.Warning);
                 return null;
             }
         }

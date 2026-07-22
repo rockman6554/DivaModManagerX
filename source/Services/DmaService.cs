@@ -18,12 +18,17 @@ namespace DivaModManager.Services
     /// API endpoints:
     ///   GET /api/v1/posts?sort=time:desc&offset=0&limit=30&query=...
     ///       → List posts. Supports filters like &filter=post_type=Song
-    ///   GET /api/v1/posts/count?query=...&limit=30
-    ///       → Returns total post count for the query (used to calculate total pages)
+    ///   GET /api/v1/posts/count?query=...&filter=...&limit=30
+    ///       → Returns total post count for the query (plain text number, used to
+    ///         calculate total pages). Respeta filter y query.
     ///   GET /api/v1/posts/{id}
     ///       → Single post
     ///   GET /api/v1/posts/{id}/download/{fileIndex}
     ///       → Download a file (returns the actual archive)
+    ///
+    /// Note: <c>query</c> is a Meilisearch full-text search across ALL indexed fields
+    /// (name, text, author name/display_name, dependencies). Searching "miku" will also
+    /// match posts by author "mikurisu39". This matches upstream TekkaGB behaviour.
     /// </summary>
     public class DmaService
     {
@@ -42,11 +47,88 @@ namespace DivaModManager.Services
 
         public event Action<string, float, long, long>? DownloadProgress;
 
-        public async Task<List<DivaModArchivePost>> FetchFeedAsync(
+        /// <summary>
+        /// Result of a feed fetch. Carries the posts plus pagination metadata
+        /// read from the <c>/posts/count</c> endpoint.
+        /// </summary>
+        public class DmaFeedResult
+        {
+            public List<DivaModArchivePost> Posts { get; set; } = new();
+            public int TotalRecords { get; set; }
+            public int TotalPages { get; set; }
+        }
+
+        // ---- Feed cache (15-minute TTL, LRU capped at 15 entries — mirrors upstream) ----
+        private static readonly Dictionary<string, DivaModArchiveModList> _feedCache = new();
+        private static readonly object _cacheLock = new();
+
+        public async Task<DmaFeedResult> FetchFeedAsync(
             int page = 1, int perPage = 20,
             DmaFeedSort sort = DmaFeedSort.Latest,
             DmaFeedFilter filter = DmaFeedFilter.None,
             string? search = null)
+        {
+            var url = BuildFeedUrl(page, perPage, sort, filter, search);
+
+            // Cache check
+            lock (_cacheLock)
+            {
+                if (_feedCache.TryGetValue(url, out var cached) && cached.IsValid)
+                {
+                    return new DmaFeedResult
+                    {
+                        Posts = cached.Posts?.ToList() ?? new(),
+                        TotalPages = (int)cached.TotalPages
+                    };
+                }
+            }
+
+            try
+            {
+                Global.logger?.WriteLine($"[DMA] Fetching: {url}", LoggerType.Info);
+                var json = await _http.GetStringAsync(url);
+                Global.logger?.WriteLine($"[DMA] Response: {json.Length} chars", LoggerType.Info);
+                var posts = JsonSerializer.Deserialize<List<DivaModArchivePost>>(json) ?? new();
+                Global.logger?.WriteLine($"[DMA] Deserialized: {posts.Count} posts", LoggerType.Info);
+
+                // Fetch total record count from /posts/count for accurate pagination.
+                // Upstream TekkaGB calls this with the SAME query; we also pass the filter
+                // (which upstream forgets, causing wrong totals when a type filter is active).
+                var totalRecords = await FetchTotalCountAsync(perPage, sort, filter, search);
+                var totalPages = perPage > 0 ? (int)Math.Ceiling(totalRecords / (double)perPage) : 1;
+                if (totalPages < 1) totalPages = posts.Count > 0 ? page : 1;
+
+                // Store in cache
+                var entry = new DivaModArchiveModList
+                {
+                    Posts = new ObservableCollection<DivaModArchivePost>(posts),
+                    TotalPages = totalPages,
+                    TimeFetched = DateTime.UtcNow
+                };
+                lock (_cacheLock)
+                {
+                    if (_feedCache.Count >= 15)
+                    {
+                        var oldest = _feedCache.OrderByDescending(k => k.Value.TimeFetched).Last();
+                        _feedCache.Remove(oldest.Key);
+                    }
+                    _feedCache[url] = entry;
+                }
+
+                return new DmaFeedResult { Posts = posts, TotalRecords = totalRecords, TotalPages = totalPages };
+            }
+            catch (Exception ex)
+            {
+                Global.logger?.WriteLine($"[DMA] feed fetch FAILED: {ex.GetType().Name}: {ex.Message}", LoggerType.Error);
+                return new DmaFeedResult();
+            }
+        }
+
+        /// <summary>
+        /// Build the /posts URL. Mirrors upstream <c>DMAFeedGenerator.GenerateUrl</c>,
+        /// with proper URL-encoding of the query (upstream is raw, which breaks on spaces).
+        /// </summary>
+        private static string BuildFeedUrl(int page, int perPage, DmaFeedSort sort, DmaFeedFilter filter, string? search)
         {
             var url = "https://divamodarchive.com/api/v1/posts?sort=" + sort switch
             {
@@ -69,22 +151,46 @@ namespace DivaModManager.Services
                 };
                 if (typeStr != null) url += $"&filter=post_type={typeStr}";
             }
-            if (!string.IsNullOrEmpty(search))
-                url += $"&query={Uri.EscapeDataString(search)}";
+            if (!string.IsNullOrWhiteSpace(search))
+                url += $"&query={Uri.EscapeDataString(search.Trim())}";
             var offset = (page - 1) * perPage;
             url += $"&offset={offset}&limit={perPage}";
+            return url;
+        }
 
+        /// <summary>
+        /// Query /posts/count for the total record count matching the current query+filter.
+        /// The endpoint returns a plain-text number (not JSON).
+        /// </summary>
+        private async Task<int> FetchTotalCountAsync(int limit, DmaFeedSort sort, DmaFeedFilter filter, string? search)
+        {
             try
             {
-                var json = await _http.GetStringAsync(url);
-                var posts = JsonSerializer.Deserialize<List<DivaModArchivePost>>(json) ?? new();
-                return posts;
+                var url = $"https://divamodarchive.com/api/v1/posts/count?limit={limit}";
+                if (!string.IsNullOrWhiteSpace(search))
+                    url += $"&query={Uri.EscapeDataString(search!.Trim())}";
+                if (filter != DmaFeedFilter.None)
+                {
+                    var typeStr = filter switch
+                    {
+                        DmaFeedFilter.Song => "Song",
+                        DmaFeedFilter.Cover => "Cover",
+                        DmaFeedFilter.Module => "Module",
+                        DmaFeedFilter.Ui => "UI",
+                        DmaFeedFilter.Plugin => "Plugin",
+                        DmaFeedFilter.Other => "Other",
+                        _ => null
+                    };
+                    if (typeStr != null) url += $"&filter=post_type={typeStr}";
+                }
+                var text = await _http.GetStringAsync(url);
+                if (double.TryParse(text.Trim(), out var n)) return (int)n;
             }
             catch (Exception ex)
             {
-                Global.logger?.WriteLine($"DMA feed fetch failed: {ex.Message}", LoggerType.Error);
-                return new();
+                Global.logger?.WriteLine($"DMA count fetch failed (pagination will be heuristic): {ex.Message}", LoggerType.Warning);
             }
+            return 0;
         }
 
         public async Task<DivaModArchivePost?> FetchPostAsync(int postId)
