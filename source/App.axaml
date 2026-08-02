@@ -10,17 +10,50 @@
     </Application.Styles>
 
     <Application.Resources>
+        <!-- Retint Fluent's system accent (default blue) to the Miku teal so built-in
+             controls (ComboBox, CheckBox, ToggleSwitch, selection, focus) match the app. -->
+        <Color x:Key="SystemAccentColor">#39C5BB</Color>
+        <Color x:Key="SystemAccentColorDark1">#2FA79E</Color>
+        <Color x:Key="SystemAccentColorDark2">#278D85</Color>
+        <Color x:Key="SystemAccentColorDark3">#1F736C</Color>
+        <Color x:Key="SystemAccentColorLight1">#4DD8CE</Color>
+        <Color x:Key="SystemAccentColorLight2">#6EE2D9</Color>
+        <Color x:Key="SystemAccentColorLight3">#8FEBE4</Color>
+
+        <!-- Miku accent palette (kept) -->
         <Color x:Key="MikuAccent">#39C5BB</Color>
         <Color x:Key="MikuAccentDark">#2A8C84</Color>
         <Color x:Key="MikuPink">#FF6B9D</Color>
         <SolidColorBrush x:Key="MikuAccentBrush" Color="#39C5BB" />
         <SolidColorBrush x:Key="MikuAccentDarkBrush" Color="#2A8C84" />
+        <SolidColorBrush x:Key="MikuAccentHoverBrush" Color="#4DD8CE" />
         <SolidColorBrush x:Key="MikuPinkBrush" Color="#FF6B9D" />
-        <SolidColorBrush x:Key="PanelBackground" Color="#1A1A1A" />
-        <SolidColorBrush x:Key="PanelBackgroundAlt" Color="#222222" />
-        <SolidColorBrush x:Key="BorderBrush" Color="#333333" />
-        <SolidColorBrush x:Key="LogInfoBrush" Color="#52FF00" />
-        <SolidColorBrush x:Key="LogWarningBrush" Color="#FFFF00" />
-        <SolidColorBrush x:Key="LogErrorBrush" Color="#FFB0B0" />
+
+        <!-- Unified surface/background palette (replaces scattered hardcoded #1F1F1F/#0F0F0F/#131313) -->
+        <SolidColorBrush x:Key="SurfaceBg" Color="#161618" />          <!-- main background -->
+        <SolidColorBrush x:Key="SurfaceBgAlt" Color="#1E1E22" />       <!-- toolbar / sub-panels -->
+        <SolidColorBrush x:Key="SurfaceBgElevated" Color="#242428" />  <!-- cards -->
+        <SolidColorBrush x:Key="PanelBackground" Color="#1A1A1E" />
+        <SolidColorBrush x:Key="PanelBackgroundAlt" Color="#222226" />
+        <SolidColorBrush x:Key="BorderBrush" Color="#2A2A30" />
+        <SolidColorBrush x:Key="BorderBrushLight" Color="#3A3A42" />
+
+        <!-- Text -->
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#E8E8EC" />
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#9A9AA4" />
+        <SolidColorBrush x:Key="TextMutedBrush" Color="#6A6A74" />
+
+        <!-- Semantic colors (replaces harsh #52FF00 / #FFFF00 / #FFB0B0) -->
+        <SolidColorBrush x:Key="SuccessBrush" Color="#4ADE80" />
+        <SolidColorBrush x:Key="WarningBrush" Color="#FBBF24" />
+        <SolidColorBrush x:Key="ErrorBrush" Color="#F87171" />
+        <!-- Back-compat aliases for the LoggerType color binding in LogEntry -->
+        <SolidColorBrush x:Key="LogInfoBrush" Color="#4ADE80" />
+        <SolidColorBrush x:Key="LogWarningBrush" Color="#FBBF24" />
+        <SolidColorBrush x:Key="LogErrorBrush" Color="#F87171" />
+
+        <!-- Danger button -->
+        <SolidColorBrush x:Key="DangerBrush" Color="#B33" />
+        <SolidColorBrush x:Key="DangerHoverBrush" Color="#C44" />
     </Application.Resources>
 </Application>

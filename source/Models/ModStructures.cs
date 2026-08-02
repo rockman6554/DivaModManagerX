@@ -1,13 +1,29 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 
 namespace DivaModManager.Models
 {
-    public class Mod
+    // Property names stay lowercase because they are serialized as-is into Config.json.
+    public class Mod : INotifyPropertyChanged
     {
-        public string name { get; set; } = string.Empty;
-        public bool enabled { get; set; }
+        private string _name = string.Empty;
+        private bool _enabled;
+
+        public string name
+        {
+            get => _name;
+            set { if (_name != value) { _name = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(name))); } }
+        }
+
+        public bool enabled
+        {
+            get => _enabled;
+            set { if (_enabled != value) { _enabled = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(enabled))); } }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
     }
 
     public class Metadata

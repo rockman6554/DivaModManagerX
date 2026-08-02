@@ -1,2 +1,13 @@
 DivaModManager.exe.windows-original
 compile.txt
+
+# Local user state — never commit (contains machine-specific paths / installed mods)
+bin-linux-x64-selfcontained/Config.json
+bin-linux-x64-selfcontained/*.orig-*
+bin-linux-x64-selfcontained/*-bak
+bin-linux-x64-selfcontained/Downloads/
+
+# .NET build artifacts
+source/bin/
+source/obj/
+*.user

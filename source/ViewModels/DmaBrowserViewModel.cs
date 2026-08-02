@@ -60,13 +60,28 @@ public partial class DmaBrowserViewModel : ObservableObject
     [ObservableProperty] private int _selectedSortIndex = 0; // Latest
     [ObservableProperty] private int _selectedFilterIndex = 0; // All
     [ObservableProperty] private bool _isLoading;
+    [ObservableProperty] private bool _isInstalling;
     [ObservableProperty] private double _progressValue;
     [ObservableProperty] private string _pageLabel = "Page 1";
     [ObservableProperty] private string _resultCount = string.Empty;
     [ObservableProperty] private string _selectedDetail = "Select a mod to see details.";
+    [ObservableProperty] private string _installStatus = string.Empty;
+    [ObservableProperty] private string _installStatusColor = "#9A9AA4";
+    [ObservableProperty] private bool _showEmpty;
+    [ObservableProperty] private string _emptyMessage = "No mods found";
+    [ObservableProperty] private string _emptyHint = "Try a different search.";
 
-    public bool CanGoPrev => _page > 1;
-    public bool CanGoNext => _page < _totalPages;
+    public bool CanGoPrev => _page > 1 && !IsLoading;
+    public bool CanGoNext => _page < _totalPages && !IsLoading;
+    public bool CanInstall => !IsInstalling;
+
+    partial void OnIsInstallingChanged(bool value) => OnPropertyChanged(nameof(CanInstall));
+    partial void OnIsLoadingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanGoPrev));
+        OnPropertyChanged(nameof(CanGoNext));
+    }
+
     private int _totalPages = 1;
     public int TotalPages
     {
@@ -142,6 +157,7 @@ public partial class DmaBrowserViewModel : ObservableObject
     private async Task LoadAsync()
     {
         IsLoading = true;
+        ShowEmpty = false;
         ProgressValue = 0;
         Posts.Clear();
         var token = _loadCts.Token;
@@ -157,17 +173,24 @@ public partial class DmaBrowserViewModel : ObservableObject
             ResultCount = feed.TotalRecords > 0
                 ? $"{feed.TotalRecords} mods total — page {_page} of {TotalPages}"
                 : $"{Posts.Count} mods on this page";
+            EmptyMessage = "No mods found";
+            EmptyHint = string.IsNullOrWhiteSpace(SearchQuery)
+                ? "DivaModArchive returned no results for this filter."
+                : $"Nothing matches \"{SearchQuery}\". Try a different search or filter.";
         }
         catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             ResultCount = $"Error: {ex.Message}";
+            EmptyMessage = "Couldn't load mods";
+            EmptyHint = "Check your internet connection, then hit Search to retry.";
         }
         finally
         {
             if (!token.IsCancellationRequested)
             {
                 IsLoading = false;
+                ShowEmpty = Posts.Count == 0;
                 PageLabel = $"Page {_page}";
                 OnPropertyChanged(nameof(CanGoPrev));
                 OnPropertyChanged(nameof(CanGoNext));
@@ -186,6 +209,8 @@ public partial class DmaBrowserViewModel : ObservableObject
         if (post.Files == null || post.Files.Count == 0)
         {
             Global.logger?.WriteLine("This post has no downloadable files.", LoggerType.Warning);
+            InstallStatus = "✗ No downloadable files";
+            InstallStatusColor = "#F87171";
             return;
         }
 
@@ -193,26 +218,51 @@ public partial class DmaBrowserViewModel : ObservableObject
         if (string.IsNullOrEmpty(modsFolder) || !System.IO.Directory.Exists(modsFolder))
         {
             Global.logger?.WriteLine("Mods folder not set. Run Setup first.", LoggerType.Warning);
+            InstallStatus = "✗ Mods folder not set — run Setup first";
+            InstallStatusColor = "#F87171";
             return;
         }
 
-        IsLoading = true;
+        IsInstalling = true;
         ProgressValue = 0;
+        InstallStatus = "Preparing download…";
+        InstallStatusColor = "#39C5BB";
         var cts = new CancellationTokenSource();
         try
         {
             Global.logger?.WriteLine($"Installing '{post.Name}' from DMA...", LoggerType.Info);
             var ok = await _dma.InstallPostAsync(post, 0, modsFolder, cts);
-            Global.logger?.WriteLine(ok ? $"Successfully installed '{post.Name}'." : $"Failed to install '{post.Name}'.", ok ? LoggerType.Info : LoggerType.Error);
+            if (ok)
+            {
+                InstallStatus = $"✓ Installed '{post.Name}'";
+                InstallStatusColor = "#4ADE80";
+                Global.logger?.WriteLine($"Successfully installed '{post.Name}'.", LoggerType.Info);
+            }
+            else
+            {
+                InstallStatus = $"✗ Failed to install '{post.Name}' — see log";
+                InstallStatusColor = "#F87171";
+                Global.logger?.WriteLine($"Failed to install '{post.Name}'.", LoggerType.Error);
+            }
         }
         catch (Exception ex)
         {
+            InstallStatus = $"✗ Install error: {ex.Message}";
+            InstallStatusColor = "#F87171";
             Global.logger?.WriteLine($"Install error: {ex.Message}", LoggerType.Error);
         }
         finally
         {
-            IsLoading = false;
+            IsInstalling = false;
             InstallComplete?.Invoke();
+            // Auto-clear the status after a few seconds so it doesn't linger forever.
+            _ = Task.Delay(6000).ContinueWith(_ =>
+            {
+                if (InstallStatus.StartsWith("✓"))
+                {
+                    InstallStatus = string.Empty;
+                }
+            });
         }
     }
 }
