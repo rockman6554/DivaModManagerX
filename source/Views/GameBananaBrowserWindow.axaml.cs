@@ -27,21 +27,48 @@ public partial class GameBananaBrowserWindow : Window
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
                 _vm.ProgressValue = pct * 100;
-                _vm.IsLoading = pct < 1;
+                if (_vm.IsInstalling)
+                {
+                    _vm.InstallStatus = $"Downloading {name}… {pct * 100:0}%";
+                    _vm.InstallStatusColor = "#39C5BB";
+                }
             });
         _vm.InstallComplete += () =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
                 _vm.IsLoading = false;
-                _vm.ProgressValue = 0;
+                if (!_vm.IsInstalling)
+                    _vm.ProgressValue = 0;
             });
-        Loaded += async (s, e) => await _vm.RefreshAsync();
+        Loaded += async (s, e) =>
+        {
+            SearchBox.Focus();
+            await _vm.RefreshAsync();
+        };
         // Cancel any in-flight loads when the window closes — prevents the freeze on 2nd open
         Closing += (s, e) =>
         {
             _loadCts?.Cancel();
             _vm.CancelLoads();
         };
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            Close();
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.Control)
+        {
+            SearchBox.Focus();
+            SearchBox.SelectAll();
+            e.Handled = true;
+            return;
+        }
+        base.OnKeyDown(e);
     }
 
     private async void Search_Click(object? sender, RoutedEventArgs e) => await _vm.RefreshAsync();
@@ -54,7 +81,17 @@ public partial class GameBananaBrowserWindow : Window
 
     private async void Install_Click(object? sender, RoutedEventArgs e)
     {
-        if (_vm.SelectedRecord == null) return;
+        // The Install button lives inside the ListBox item template, so SelectedRecord
+        // may not be set yet when the user clicks it. Resolve the record from the
+        // button's own DataContext (which is the GameBananaRecordViewModel for that row).
+        var recVm = (sender as Avalonia.Controls.Button)?.DataContext as GameBananaRecordViewModel;
+        if (recVm != null)
+            _vm.SelectedRecord = recVm;
+        if (_vm.SelectedRecord == null)
+        {
+            Global.logger?.WriteLine("No mod selected for install.", Services.LoggerType.Warning);
+            return;
+        }
         await _vm.InstallSelectedAsync();
     }
 

@@ -275,26 +275,37 @@ namespace DivaModManager.Services
                     : Path.GetFileNameWithoutExtension(archivePath);
                 var dest = Path.Combine(modsFolder, modName);
                 dest = EnsureUniquePath(dest);
-                Directory.Move(tempDir, dest);
+                try { Directory.Move(tempDir, dest); }
+                catch (Exception moveEx)
+                {
+                    Global.logger?.WriteLine($"Failed to move mod folder to {dest}: {moveEx.Message}", LoggerType.Error);
+                    return false;
+                }
                 WriteMetadata(dest, post);
                 Global.logger?.WriteLine($"Installed mod (no config.toml found): {modName}", LoggerType.Info);
                 try { File.Delete(archivePath); } catch { }
                 return true;
             }
 
+            var anyMoved = false;
             foreach (var folder in modFolders)
             {
                 var folderName = Path.GetFileName(folder);
                 var dest = Path.Combine(modsFolder, folderName);
                 dest = EnsureUniquePath(dest);
-                Directory.Move(folder, dest);
+                try { Directory.Move(folder, dest); anyMoved = true; }
+                catch (Exception moveEx)
+                {
+                    Global.logger?.WriteLine($"Failed to move mod folder {folderName} to {dest}: {moveEx.Message}", LoggerType.Error);
+                    continue;
+                }
                 WriteMetadata(dest, post);
                 Global.logger?.WriteLine($"Installed mod: {folderName}", LoggerType.Info);
             }
 
             // Cleanup
             try { Directory.Delete(tempDir, true); File.Delete(archivePath); } catch { }
-            return true;
+            return anyMoved;
         }
 
         private static string EnsureUniquePath(string path)

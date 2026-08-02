@@ -26,17 +26,44 @@ public partial class DmaBrowserWindow : Window
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
                 _vm.ProgressValue = pct * 100;
-                _vm.IsLoading = pct < 1;
+                if (_vm.IsInstalling)
+                {
+                    _vm.InstallStatus = $"Downloading {name}… {pct * 100:0}%";
+                    _vm.InstallStatusColor = "#39C5BB";
+                }
             });
         _vm.InstallComplete += () =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
                 _vm.IsLoading = false;
-                _vm.ProgressValue = 0;
+                if (!_vm.IsInstalling)
+                    _vm.ProgressValue = 0;
             });
-        Loaded += async (s, e) => await _vm.RefreshAsync();
+        Loaded += async (s, e) =>
+        {
+            SearchBox.Focus();
+            await _vm.RefreshAsync();
+        };
         // Cancel any in-flight loads when the window closes — prevents the freeze on 2nd open
         Closing += (s, e) => _vm.CancelLoads();
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            Close();
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.Control)
+        {
+            SearchBox.Focus();
+            SearchBox.SelectAll();
+            e.Handled = true;
+            return;
+        }
+        base.OnKeyDown(e);
     }
 
     private async void Search_Click(object? sender, RoutedEventArgs e) => await _vm.RefreshAsync();
@@ -48,7 +75,17 @@ public partial class DmaBrowserWindow : Window
     private async void NextPage_Click(object? sender, RoutedEventArgs e) => await _vm.NextPageAsync();
     private async void Install_Click(object? sender, RoutedEventArgs e)
     {
-        if (_vm.SelectedPost == null) return;
+        // The Install button lives inside the ListBox item template, so SelectedPost
+        // may not be set yet when the user clicks it. Resolve the post from the
+        // button's own DataContext (which is the DmaPostViewModel for that row).
+        var postVm = (sender as Avalonia.Controls.Button)?.DataContext as DmaPostViewModel;
+        if (postVm != null)
+            _vm.SelectedPost = postVm;
+        if (_vm.SelectedPost == null)
+        {
+            Global.logger?.WriteLine("No post selected for install.", Services.LoggerType.Warning);
+            return;
+        }
         await _vm.InstallSelectedAsync();
     }
     private async void ResultsList_DoubleTapped(object? sender, TappedEventArgs e)

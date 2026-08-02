@@ -49,13 +49,27 @@ public partial class GameBananaBrowserViewModel : ObservableObject
     [ObservableProperty] private GameBananaRecordViewModel? _selectedRecord;
     [ObservableProperty] private int _selectedPerPageIndex = 1; // 20
     [ObservableProperty] private bool _isLoading;
+    [ObservableProperty] private bool _isInstalling;
     [ObservableProperty] private double _progressValue;
     [ObservableProperty] private string _pageLabel = "Page 1";
     [ObservableProperty] private string _resultCount = string.Empty;
     [ObservableProperty] private string _selectedDetail = "Select a mod to see details.";
+    [ObservableProperty] private string _installStatus = string.Empty;
+    [ObservableProperty] private string _installStatusColor = "#9A9AA4";
+    [ObservableProperty] private bool _showEmpty;
+    [ObservableProperty] private string _emptyMessage = "No mods found";
+    [ObservableProperty] private string _emptyHint = "Try a different search.";
 
-    public bool CanGoPrev => _page > 1;
-    public bool CanGoNext => _page < _totalPages;
+    public bool CanGoPrev => _page > 1 && !IsLoading;
+    public bool CanGoNext => _page < _totalPages && !IsLoading;
+    public bool CanInstall => !IsInstalling;
+
+    partial void OnIsInstallingChanged(bool value) => OnPropertyChanged(nameof(CanInstall));
+    partial void OnIsLoadingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanGoPrev));
+        OnPropertyChanged(nameof(CanGoNext));
+    }
 
     public event Action<string, float, long, long>? DownloadProgress;
     public event Action? InstallComplete;
@@ -133,6 +147,7 @@ public partial class GameBananaBrowserViewModel : ObservableObject
     private async Task LoadAsync()
     {
         IsLoading = true;
+        ShowEmpty = false;
         ProgressValue = 0;
         Records.Clear();
         var token = _loadCts.Token;
@@ -146,17 +161,24 @@ public partial class GameBananaBrowserViewModel : ObservableObject
             ResultCount = feed.TotalRecords > 0
                 ? $"{feed.TotalRecords} mods total — page {_page} of {TotalPages}"
                 : $"{Records.Count} mods on this page";
+            EmptyMessage = "No mods found";
+            EmptyHint = string.IsNullOrWhiteSpace(SearchQuery)
+                ? "GameBanana returned no results for this page."
+                : $"Nothing matches \"{SearchQuery}\". Try a different search.";
         }
         catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
             ResultCount = $"Error: {ex.Message}";
+            EmptyMessage = "Couldn't load mods";
+            EmptyHint = "Check your internet connection, then hit Search to retry.";
         }
         finally
         {
             if (!token.IsCancellationRequested)
             {
                 IsLoading = false;
+                ShowEmpty = Records.Count == 0;
                 PageLabel = $"Page {_page}";
                 OnPropertyChanged(nameof(CanGoPrev));
                 OnPropertyChanged(nameof(CanGoNext));
@@ -175,6 +197,8 @@ public partial class GameBananaBrowserViewModel : ObservableObject
         if (record.AllFiles == null || record.AllFiles.Count == 0)
         {
             Global.logger?.WriteLine("This mod has no downloadable files.", LoggerType.Warning);
+            InstallStatus = "✗ No downloadable files";
+            InstallStatusColor = "#F87171";
             return;
         }
 
@@ -182,27 +206,51 @@ public partial class GameBananaBrowserViewModel : ObservableObject
         if (string.IsNullOrEmpty(modsFolder) || !System.IO.Directory.Exists(modsFolder))
         {
             Global.logger?.WriteLine("Mods folder not set. Run Setup first.", LoggerType.Warning);
+            InstallStatus = "✗ Mods folder not set — run Setup first";
+            InstallStatusColor = "#F87171";
             return;
         }
 
-        IsLoading = true;
+        IsInstalling = true;
         ProgressValue = 0;
+        InstallStatus = "Preparing download…";
+        InstallStatusColor = "#39C5BB";
         var cts = new CancellationTokenSource();
         try
         {
             Global.logger?.WriteLine($"Installing '{record.Title}' from GameBanana...", LoggerType.Info);
             var file = record.AllFiles[0];
             var ok = await _gb.InstallFromFileAsync(file.DownloadUrl!, file.FileName ?? $"gb-{record.Title}.zip", modsFolder, record, cts);
-            Global.logger?.WriteLine(ok ? $"Successfully installed '{record.Title}'." : $"Failed to install '{record.Title}'.", ok ? LoggerType.Info : LoggerType.Error);
+            if (ok)
+            {
+                InstallStatus = $"✓ Installed '{record.Title}'";
+                InstallStatusColor = "#4ADE80";
+                Global.logger?.WriteLine($"Successfully installed '{record.Title}'.", LoggerType.Info);
+            }
+            else
+            {
+                InstallStatus = $"✗ Failed to install '{record.Title}' — see log";
+                InstallStatusColor = "#F87171";
+                Global.logger?.WriteLine($"Failed to install '{record.Title}'.", LoggerType.Error);
+            }
         }
         catch (Exception ex)
         {
+            InstallStatus = $"✗ Install error: {ex.Message}";
+            InstallStatusColor = "#F87171";
             Global.logger?.WriteLine($"Install error: {ex.Message}", LoggerType.Error);
         }
         finally
         {
-            IsLoading = false;
+            IsInstalling = false;
             InstallComplete?.Invoke();
+            _ = Task.Delay(6000).ContinueWith(_ =>
+            {
+                if (InstallStatus.StartsWith("✓"))
+                {
+                    InstallStatus = string.Empty;
+                }
+            });
         }
     }
 }

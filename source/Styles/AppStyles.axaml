@@ -1,59 +1,178 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- Miku-themed accent overrides -->
+    <!-- ===== Text styles ===== -->
+    <Style Selector="TextBlock.header">
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+    </Style>
+
+    <Style Selector="TextBlock.muted">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+    </Style>
+
+    <!-- ===== Panel / card surfaces ===== -->
+    <Style Selector="Border.panel">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBgAlt}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Padding" Value="14"/>
+    </Style>
+
+    <Style Selector="Border.card">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBgElevated}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Padding" Value="12"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.12"/>
+                <BrushTransition Property="Background" Duration="0:0:0.12"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.card:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource MikuAccentBrush}"/>
+    </Style>
+
+    <!-- Vertical toolbar separator -->
+    <Style Selector="Border.vsep">
+        <Setter Property="Width" Value="1"/>
+        <Setter Property="Background" Value="{DynamicResource BorderBrushLight}"/>
+        <Setter Property="Margin" Value="4,6"/>
+    </Style>
+
+    <Style Selector="Panel.surface">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBgAlt}"/>
+    </Style>
+
+    <!-- ===== Button: primary (Miku accent) — full state coverage ===== -->
     <Style Selector="Button.primary">
         <Setter Property="Background" Value="{DynamicResource MikuAccentBrush}"/>
         <Setter Property="Foreground" Value="Black"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Padding" Value="16,8"/>
-        <Setter Property="CornerRadius" Value="4"/>
+        <Setter Property="Padding" Value="18,9"/>
+        <Setter Property="CornerRadius" Value="6"/>
     </Style>
     <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource MikuAccentHoverBrush}"/>
+    </Style>
+    <Style Selector="Button.primary:pressed /template/ ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource MikuAccentDarkBrush}"/>
     </Style>
+    <Style Selector="Button.primary:disabled /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource MikuAccentDarkBrush}"/>
+        <Setter Property="Opacity" Value="0.4"/>
+    </Style>
 
+    <!-- ===== Button: danger (red) — full state coverage ===== -->
     <Style Selector="Button.danger">
-        <Setter Property="Background" Value="#A33"/>
+        <Setter Property="Background" Value="{DynamicResource DangerBrush}"/>
         <Setter Property="Foreground" Value="White"/>
-        <Setter Property="Padding" Value="16,8"/>
-        <Setter Property="CornerRadius" Value="4"/>
+        <Setter Property="Padding" Value="18,9"/>
+        <Setter Property="CornerRadius" Value="6"/>
+    </Style>
+    <Style Selector="Button.danger:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource DangerHoverBrush}"/>
+    </Style>
+    <Style Selector="Button.danger:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="#933"/>
+    </Style>
+    <Style Selector="Button.danger:disabled /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource DangerBrush}"/>
+        <Setter Property="Opacity" Value="0.4"/>
     </Style>
 
-    <Style Selector="TextBlock.header">
+    <!-- ===== Button: subtle (transparent, text in accent, hover surface) ===== -->
+    <Style Selector="Button.subtle">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        <Setter Property="Padding" Value="14,8"/>
+        <Setter Property="CornerRadius" Value="6"/>
+    </Style>
+    <Style Selector="Button.subtle:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBgElevated}"/>
+    </Style>
+    <Style Selector="Button.subtle:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource BorderBrush}"/>
+    </Style>
+
+    <!-- ===== Button: icon (compact square) ===== -->
+    <Style Selector="Button.icon">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="CornerRadius" Value="4"/>
+        <Setter Property="MinWidth" Value="32"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Button.icon:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBgElevated}"/>
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource MikuAccentBrush}"/>
+    </Style>
+
+    <!-- ===== Smooth hover/press feedback on all buttons ===== -->
+    <Style Selector="Button /template/ ContentPresenter">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12"/>
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <!-- ===== DataGrid ===== -->
+    <Style Selector="DataGridColumnHeader">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="FontSize" Value="16"/>
-        <Setter Property="Foreground" Value="{DynamicResource MikuAccentBrush}"/>
+        <Setter Property="FontSize" Value="12"/>
     </Style>
-
-    <Style Selector="TextBlock.title">
-        <Setter Property="FontWeight" Value="Bold"/>
-        <Setter Property="FontSize" Value="20"/>
-    </Style>
-
-    <Style Selector="Panel.surface">
-        <Setter Property="Background" Value="{DynamicResource PanelBackgroundAlt}"/>
-    </Style>
-
-    <Style Selector="Border.panel">
-        <Setter Property="Background" Value="{DynamicResource PanelBackground}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="4"/>
-        <Setter Property="Padding" Value="12"/>
-    </Style>
-
     <Style Selector="DataGridRow">
         <Setter Property="Background" Value="Transparent"/>
     </Style>
     <Style Selector="DataGridRow:pointerover /template/ Border">
-        <Setter Property="Background" Value="#223836"/>
+        <Setter Property="Background" Value="#1A3A36"/>
     </Style>
     <Style Selector="DataGridRow:selected /template/ Border">
         <Setter Property="Background" Value="{DynamicResource MikuAccentDarkBrush}"/>
     </Style>
 
+    <!-- ===== ListBox ===== -->
     <Style Selector="ListBoxItem">
-        <Setter Property="Padding" Value="6,2"/>
+        <Setter Property="Padding" Value="8,4"/>
+    </Style>
+
+    <!-- Card lists (mod browsers): let the card itself carry hover/selection visuals
+         instead of Fluent's default item highlight rectangle. -->
+    <Style Selector="ListBox.cards ListBoxItem">
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="ListBox.cards ListBoxItem:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="ListBox.cards ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="ListBox.cards ListBoxItem:selected Border.card">
+        <Setter Property="BorderBrush" Value="{DynamicResource MikuAccentBrush}"/>
+        <Setter Property="Background" Value="#1E2E2C"/>
+    </Style>
+
+    <!-- ===== TextBox: subtle border accent on focus ===== -->
+    <Style Selector="TextBox">
+        <Setter Property="CornerRadius" Value="6"/>
+    </Style>
+
+    <!-- ===== ProgressBar: Miku accent fill ===== -->
+    <Style Selector="ProgressBar">
+        <Setter Property="Foreground" Value="{DynamicResource MikuAccentBrush}"/>
+    </Style>
+
+    <!-- ===== GridSplitter: subtle accent stripe while hovered/dragged ===== -->
+    <Style Selector="GridSplitter:pointerover">
+        <Setter Property="Background" Value="{DynamicResource MikuAccentDarkBrush}"/>
     </Style>
 </Styles>

@@ -5,146 +5,197 @@
         x:Class="DivaModManager.Views.MainWindow"
         Icon="avares://DivaModManager/Assets/miku.ico"
         Title="DivaModManager X"
-        Background="#131313"
-        MinWidth="900" MinHeight="600"
+        Background="{DynamicResource SurfaceBg}"
+        TextElement.Foreground="{DynamicResource TextPrimaryBrush}"
+        MinWidth="980" MinHeight="640"
         WindowStartupLocation="CenterScreen">
 
-    <Grid RowDefinitions="Auto,*,Auto,Auto">
+    <Window.KeyBindings>
+        <KeyBinding Gesture="F5" Command="{Binding RefreshModsCommand}"/>
+        <KeyBinding Gesture="Ctrl+L" Command="{Binding LaunchCommand}"/>
+        <KeyBinding Gesture="Ctrl+G" Command="{Binding OpenGameBananaBrowserCommand}"/>
+        <KeyBinding Gesture="Ctrl+D" Command="{Binding OpenDmaBrowserCommand}"/>
+        <KeyBinding Gesture="Delete" Command="{Binding DeleteModCommand}"/>
+        <KeyBinding Gesture="Alt+Up" Command="{Binding MoveUpCommand}"/>
+        <KeyBinding Gesture="Alt+Down" Command="{Binding MoveDownCommand}"/>
+    </Window.KeyBindings>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*" MinHeight="300"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="170" MinHeight="80" MaxHeight="420"/>
+        </Grid.RowDefinitions>
 
         <!-- Top toolbar -->
-        <Border Grid.Row="0" Background="#1F1F1F" Padding="12,8" BorderBrush="#333" BorderThickness="0,0,0,1">
+        <Border Grid.Row="0" Background="{DynamicResource SurfaceBgAlt}" Padding="16,10" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <TextBlock FontWeight="Bold" FontSize="16" Foreground="White">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <TextBlock FontWeight="Bold" FontSize="17" Foreground="{DynamicResource TextPrimaryBrush}">
                         <Run Text="DivaModManager "/>
                         <Run Text="X" Foreground="{DynamicResource MikuAccentBrush}" FontWeight="ExtraBold"/>
                     </TextBlock>
-                    <TextBlock Text="v1.3.1" Foreground="#888" VerticalAlignment="Center"/>
+                    <TextBlock Text="v1.3.1" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" FontSize="11"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
-                    <Button Content="Setup" Command="{Binding SetupCommand}" Classes="primary"/>
-                    <Button Content="GameBanana" Command="{Binding OpenGameBananaBrowserCommand}" ToolTip.Tip="Browse mods on GameBanana"/>
-                    <Button Content="DMA" Command="{Binding OpenDmaBrowserCommand}" ToolTip.Tip="Browse mods on DivaModArchive"/>
-                    <Button Content="From URL" Command="{Binding InstallFromUrlCommand}" ToolTip.Tip="Install from a GameBanana or DMA URL"/>
-                    <Button Content="Open Mods" Command="{Binding OpenModsFolderCommand}"/>
-                    <Button Content="Refresh" Command="{Binding RefreshModsCommand}"/>
-                    <Button Content="Launch" Command="{Binding LaunchCommand}" Classes="primary"/>
+                    <Button Content="Setup" Command="{Binding SetupCommand}" IsEnabled="{Binding !IsBusy}" Classes="subtle" ToolTip.Tip="Detect the game and install DivaModLoader"/>
+                    <Border Classes="vsep"/>
+                    <Button Content="GameBanana" Command="{Binding OpenGameBananaBrowserCommand}" Classes="subtle" ToolTip.Tip="Browse mods on GameBanana (Ctrl+G)"/>
+                    <Button Content="DMA" Command="{Binding OpenDmaBrowserCommand}" Classes="subtle" ToolTip.Tip="Browse mods on DivaModArchive (Ctrl+D)"/>
+                    <Button Content="From URL" Command="{Binding InstallFromUrlCommand}" IsEnabled="{Binding !IsBusy}" Classes="subtle" ToolTip.Tip="Install from a GameBanana or DMA URL"/>
+                    <Border Classes="vsep"/>
+                    <Button Content="Open Mods" Command="{Binding OpenModsFolderCommand}" Classes="subtle" ToolTip.Tip="Open the mods folder in your file manager"/>
+                    <Button Content="Refresh" Command="{Binding RefreshModsCommand}" Classes="subtle" ToolTip.Tip="Reload the mod list from disk (F5)"/>
+                    <Border Classes="vsep"/>
+                    <Button Content="▶ Launch" Command="{Binding LaunchCommand}" IsEnabled="{Binding !IsBusy}" Classes="primary" ToolTip.Tip="Launch the game via Steam, mods loaded by DML (Ctrl+L)"/>
                     <Button Content="Force Kill" Command="{Binding ForceKillGameCommand}" Classes="danger" ToolTip.Tip="Force-kill the game if it freezes on exit"/>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- Main content: 3 columns (mod list / mod detail / sidebar) -->
-        <Grid Grid.Row="1" ColumnDefinitions="2*,1*,1*" Margin="8">
+        <!-- Main content: 3 columns -->
+        <Grid Grid.Row="1" ColumnDefinitions="2*,1.2*,1*" Margin="10">
 
-            <!-- Column 1: Mods list with drag-drop reorder -->
+            <!-- Column 1: Mods list -->
             <Border Grid.Column="0" Classes="panel">
                 <Grid RowDefinitions="Auto,*,Auto">
-                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
-                        <TextBlock Grid.Column="0" Text="Mods" Classes="header"/>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                            <Button Content="Up" Command="{Binding MoveUpCommand}" Padding="8,2"/>
-                            <Button Content="Down" Command="{Binding MoveDownCommand}" Padding="8,2"/>
-                            <Button Content="A-Z" Command="{Binding SortAlphabeticalCommand}" Padding="8,2" ToolTip.Tip="Sort alphabetically"/>
-                            <Button Content="Delete" Command="{Binding DeleteModCommand}" Classes="danger" Padding="8,2"/>
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,10">
+                        <TextBlock Grid.Column="0" Text="Mods" Classes="header" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="{Binding ModCountLabel}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                            <Button Content="▲" Command="{Binding MoveUpCommand}" Classes="icon" ToolTip.Tip="Move up (Alt+↑)"/>
+                            <Button Content="▼" Command="{Binding MoveDownCommand}" Classes="icon" ToolTip.Tip="Move down (Alt+↓)"/>
+                            <Button Content="A-Z" Command="{Binding SortAlphabeticalCommand}" Classes="icon" ToolTip.Tip="Sort alphabetically"/>
+                            <Button Content="✕" Command="{Binding DeleteModCommand}" Classes="icon" ToolTip.Tip="Delete selected mod (Del)"/>
                         </StackPanel>
                     </Grid>
 
-                    <DataGrid Grid.Row="1"
-                              ItemsSource="{Binding ModList}"
-                              SelectedItem="{Binding SelectedMod, Mode=TwoWay}"
-                              GridLinesVisibility="Horizontal"
-                              BorderThickness="1"
-                              BorderBrush="#333"
-                              CanUserReorderColumns="False"
-                              CanUserSortColumns="False"
-                              IsReadOnly="True"
-                              AutoGenerateColumns="False">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Mod Name" Binding="{Binding name}" Width="*"/>
-                            <DataGridCheckBoxColumn Header="Enabled" Binding="{Binding enabled, Mode=TwoWay}" Width="80"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
+                    <!-- DataGrid with empty-state overlay -->
+                    <Grid Grid.Row="1">
+                        <DataGrid ItemsSource="{Binding ModList}"
+                                  SelectedItem="{Binding SelectedMod, Mode=TwoWay}"
+                                  GridLinesVisibility="Horizontal"
+                                  BorderThickness="1"
+                                  BorderBrush="{DynamicResource BorderBrush}"
+                                  CanUserReorderColumns="False"
+                                  CanUserSortColumns="False"
+                                  SelectionMode="Single"
+                                  IsReadOnly="True"
+                                  AutoGenerateColumns="False">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Mod Name" Binding="{Binding name}" Width="*"/>
+                                <!-- Template column: stays clickable even with IsReadOnly="True",
+                                     and toggles in a single click (a DataGridCheckBoxColumn does neither). -->
+                                <DataGridTemplateColumn Header="Enabled" Width="90">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate DataType="models:Mod">
+                                            <CheckBox IsChecked="{Binding enabled, Mode=TwoWay}"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                      ToolTip.Tip="Enable/disable this mod"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <!-- Empty state overlay -->
+                        <Border Background="{DynamicResource SurfaceBg}"
+                                IsVisible="{Binding ModList.Count, Converter={x:Static vm:CountToVisibilityConverter.Instance}}"
+                                HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                                <TextBlock Text="📦" FontSize="48" HorizontalAlignment="Center" Opacity="0.4"/>
+                                <TextBlock Text="No mods installed yet" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                                <TextBlock Text="Click GameBanana or DMA to browse and install mods." Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center" FontSize="12"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
 
-                    <TextBlock Grid.Row="2" Text="Use Up/Down to reorder. Check the box to toggle a mod." Foreground="#888" FontSize="11" Margin="0,4,0,0"/>
+                    <TextBlock Grid.Row="2" Text="Click a checkbox to toggle · Alt+↑/↓ to reorder · Del to delete. Changes are saved instantly." Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,6,0,0"/>
                 </Grid>
             </Border>
 
-            <!-- Column 2: Mod detail / metadata -->
-            <Border Grid.Column="1" Classes="panel" Margin="8,0">
+            <!-- Column 2: Mod Info -->
+            <Border Grid.Column="1" Classes="panel" Margin="10,0">
                 <Grid RowDefinitions="Auto,*,Auto">
-                    <TextBlock Grid.Row="0" Text="Mod Info" Classes="header" Margin="0,0,0,8"/>
-                    <StackPanel Grid.Row="1" Spacing="6">
-                        <TextBlock Text="Name:" Foreground="#888" FontSize="11"/>
-                        <TextBlock Text="{Binding SelectedMod.name, FallbackValue='(no mod selected)'}" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                        <TextBlock Text="Enabled:" Foreground="#888" FontSize="11" Margin="0,8,0,0"/>
-                        <TextBlock Text="{Binding SelectedMod.enabled, FallbackValue='—'}"/>
-                        <Button Content="Toggle" Command="{Binding ToggleModCommand}" CommandParameter="{Binding SelectedMod}" Margin="0,8,0,0" Padding="8,4"/>
+                    <TextBlock Grid.Row="0" Text="Mod Info" Classes="header" Margin="0,0,0,10"/>
+                    <StackPanel Grid.Row="1" Spacing="8">
+                        <TextBlock Text="Name" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+                        <TextBlock Text="{Binding SelectedMod.name, FallbackValue='(no mod selected)'}" FontWeight="SemiBold" TextWrapping="Wrap" FontSize="13"/>
+                        <ToggleSwitch IsChecked="{Binding SelectedMod.enabled, Mode=TwoWay}"
+                                      OnContent="Enabled" OffContent="Disabled"
+                                      IsEnabled="{Binding SelectedMod, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                      Margin="0,4,0,0"
+                                      ToolTip.Tip="Enable/disable the selected mod"/>
                     </StackPanel>
                     <StackPanel Grid.Row="2" Spacing="4">
-                        <TextBlock Text="Game:" Foreground="#888" FontSize="11"/>
+                        <TextBlock Text="Game" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
                         <TextBlock Text="{Binding CurrentGame}" TextWrapping="Wrap"/>
-                        <TextBlock Text="Mods Folder:" Foreground="#888" FontSize="11" Margin="0,8,0,0"/>
-                        <TextBlock Text="{Binding ModsFolderPath}" TextWrapping="Wrap" FontFamily="Roboto Mono,monospace" FontSize="11"/>
-                        <TextBlock Text="Game Exe:" Foreground="#888" FontSize="11" Margin="0,8,0,0"/>
-                        <TextBlock Text="{Binding GameExePath}" TextWrapping="Wrap" FontFamily="Roboto Mono,monospace" FontSize="11"/>
-                        <TextBlock Text="DML Version:" Foreground="#888" FontSize="11" Margin="0,8,0,0"/>
-                        <TextBlock Text="{Binding DmlVersion}" Foreground="{DynamicResource MikuAccentBrush}"/>
+                        <TextBlock Text="Mods Folder" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,6,0,0"/>
+                        <TextBlock Text="{Binding ModsFolderPath}" TextWrapping="Wrap" FontFamily="Roboto Mono,monospace" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <TextBlock Text="Game Exe" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,6,0,0"/>
+                        <TextBlock Text="{Binding GameExePath}" TextWrapping="Wrap" FontFamily="Roboto Mono,monospace" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <TextBlock Text="DML Version" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,6,0,0"/>
+                        <TextBlock Text="{Binding DmlVersion}" Foreground="{DynamicResource MikuAccentBrush}" FontWeight="SemiBold"/>
                     </StackPanel>
                 </Grid>
             </Border>
 
-            <!-- Column 3: Loadouts + Steam status -->
-            <Border Grid.Column="2" Classes="panel" Margin="8,0,0,0">
+            <!-- Column 3: Loadout + Steam + Updates -->
+            <Border Grid.Column="2" Classes="panel" Margin="10,0,0,0">
                 <Grid RowDefinitions="Auto,*,Auto,Auto">
-                    <StackPanel Grid.Row="0" Spacing="6" Margin="0,0,0,12">
+                    <!-- Loadout -->
+                    <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,16">
                         <TextBlock Text="Loadout" Classes="header"/>
                         <ComboBox ItemsSource="{Binding Loadouts}"
                                   SelectedItem="{Binding SelectedLoadout, Mode=TwoWay}"
-                                  HorizontalAlignment="Stretch"/>
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <Button Content="+" Command="{Binding AddLoadoutCommand}" Padding="12,4" ToolTip.Tip="New loadout"/>
-                            <Button Content="-" Command="{Binding DeleteLoadoutCommand}" Padding="12,4" ToolTip.Tip="Delete current loadout"/>
+                                  HorizontalAlignment="Stretch"
+                                  ToolTip.Tip="Switch between saved mod loadouts"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Button Content="＋ New" Command="{Binding AddLoadoutCommand}" Classes="subtle" Padding="12,5" ToolTip.Tip="Create a new loadout"/>
+                            <Button Content="✕ Delete" Command="{Binding DeleteLoadoutCommand}" Classes="subtle" Padding="12,5" ToolTip.Tip="Delete current loadout"/>
                         </StackPanel>
                     </StackPanel>
 
                     <StackPanel Grid.Row="1"/>
 
                     <!-- Steam launch status -->
-                    <Border Grid.Row="2" Background="#0F0F0F" BorderBrush="#333" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,8">
-                        <StackPanel Spacing="4">
+                    <Border Grid.Row="2" Background="{DynamicResource SurfaceBg}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,10">
+                        <StackPanel Spacing="6">
                             <TextBlock Text="Steam Launch Status" Classes="header"/>
-                            <TextBlock Text="{Binding SteamStatus}" TextWrapping="Wrap" FontSize="11"/>
+                            <TextBlock Text="{Binding SteamStatus}" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
                             <Button Content="Copy Steam Launch Option" Command="{Binding ConfigureSteamCommand}" Margin="0,4,0,0" HorizontalAlignment="Stretch"
-                                    ToolTip.Tip="Copy WINEDLLOVERRIDES=dinput8.dll=n,b to the clipboard so you can paste it into Steam → Properties → Launch Options"/>
+                                    Classes="subtle" ToolTip.Tip="Copy WINEDLLOVERRIDES=dinput8.dll=n,b to the clipboard"/>
                         </StackPanel>
                     </Border>
 
-                    <StackPanel Grid.Row="3" Spacing="4">
-                        <Button Content="Check for DML Update" Command="{Binding CheckForDmlUpdateCommand}" HorizontalAlignment="Stretch"/>
-                        <Button Content="Check for DMM Update" Command="{Binding CheckForSelfUpdateCommand}" HorizontalAlignment="Stretch"/>
+                    <!-- Updates -->
+                    <StackPanel Grid.Row="3" Spacing="4" Margin="0,4,0,0">
+                        <Button Content="Check for DML Update" Command="{Binding CheckForDmlUpdateCommand}" HorizontalAlignment="Stretch" Classes="subtle"/>
+                        <Button Content="Check for DMM Update" Command="{Binding CheckForSelfUpdateCommand}" HorizontalAlignment="Stretch" Classes="subtle"/>
                     </StackPanel>
                 </Grid>
             </Border>
         </Grid>
 
-        <!-- Progress bar -->
-        <Border Grid.Row="2" Background="#1F1F1F" Padding="12,6" BorderBrush="#333" BorderThickness="0,1,0,0"
-                IsVisible="{Binding ProgressVisible}">
-            <Grid ColumnDefinitions="*,Auto">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <ProgressBar Value="{Binding ProgressValue}" Maximum="100" Width="200"/>
-                    <TextBlock Text="{Binding ProgressLabel}" Foreground="#CCC"/>
-                </StackPanel>
-            </Grid>
-        </Border>
+        <!-- Splitter: drag to resize the log area -->
+        <GridSplitter Grid.Row="2" Height="6" ResizeDirection="Rows" Background="Transparent"/>
 
         <!-- Log console -->
-        <Border Grid.Row="3" Background="#0F0F0F" Padding="8" BorderBrush="#333" BorderThickness="0,1,0,0" Height="160">
+        <Border Grid.Row="3" Background="{DynamicResource SurfaceBg}" Padding="10" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
             <Grid RowDefinitions="Auto,*">
-                <TextBlock Grid.Row="0" Text="Log" Classes="header" Margin="0,0,0,4"/>
-                <ListBox Grid.Row="1" ItemsSource="{Binding LogEntries}" Background="Transparent" BorderThickness="0">
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="0,0,0,4">
+                    <TextBlock Grid.Column="0" Text="Log" Classes="header" VerticalAlignment="Center"/>
+                    <!-- Download/setup progress lives here so it is always in view -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center"
+                                IsVisible="{Binding ProgressVisible}" Margin="0,0,12,0">
+                        <ProgressBar Value="{Binding ProgressValue}" Maximum="100" Width="200"/>
+                        <TextBlock Text="{Binding ProgressLabel}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Button Grid.Column="3" Content="Copy" Command="{Binding CopyLogCommand}" Classes="icon" FontSize="11" ToolTip.Tip="Copy the whole log to the clipboard"/>
+                    <Button Grid.Column="4" Content="Clear" Command="{Binding ClearLogCommand}" Classes="icon" FontSize="11" ToolTip.Tip="Clear the log"/>
+                </Grid>
+                <ListBox x:Name="LogList" Grid.Row="1" ItemsSource="{Binding LogEntries}" Background="Transparent" BorderThickness="0">
                     <ListBox.ItemTemplate>
                         <DataTemplate DataType="vm:LogEntry">
                             <TextBlock FontFamily="Roboto Mono,monospace" FontSize="11" TextWrapping="NoWrap">

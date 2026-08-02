@@ -5,27 +5,28 @@
         x:Class="DivaModManager.Views.DmaBrowserWindow"
         Icon="avares://DivaModManager/Assets/miku.ico"
         Title="DivaModArchive Browser — DivaModManager X"
-        Background="#131313"
-        Width="1100" Height="720"
-        MinWidth="800" MinHeight="500"
+        Background="{DynamicResource SurfaceBg}"
+        TextElement.Foreground="{DynamicResource TextPrimaryBrush}"
+        Width="1100" Height="740"
+        MinWidth="820" MinHeight="520"
         WindowStartupLocation="CenterOwner">
 
-    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+    <Grid RowDefinitions="Auto,Auto,*,Auto,Auto">
 
         <!-- Search bar -->
-        <Border Grid.Row="0" Background="#1F1F1F" Padding="12,8" BorderBrush="#333" BorderThickness="0,0,0,1">
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto">
-                <TextBox Grid.Column="0" x:Name="SearchBox" Watermark="Search DMA mods..." Text="{Binding SearchQuery, Mode=TwoWay}" KeyDown="SearchBox_KeyDown"/>
-                <Button Grid.Column="1" Content="Search" Click="Search_Click" Classes="primary" Margin="6,0,0,0"/>
-                <Button Grid.Column="2" Content="Open DMA" Click="OpenDma_Click" Margin="6,0,0,0"/>
-                <TextBlock Grid.Column="3" Text="Sort:" Foreground="#888" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                <ComboBox Grid.Column="4" x:Name="SortBox" SelectedIndex="{Binding SelectedSortIndex, Mode=TwoWay}" Margin="6,0,0,0">
+        <Border Grid.Row="0" Background="{DynamicResource SurfaceBgAlt}" Padding="14,10" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto">
+                <TextBox Grid.Column="0" x:Name="SearchBox" Watermark="Search mods by name, author, description…  (Ctrl+F)" Text="{Binding SearchQuery, Mode=TwoWay}" KeyDown="SearchBox_KeyDown"/>
+                <Button Grid.Column="1" Content="Search" Click="Search_Click" Classes="primary" Margin="8,0,0,0" ToolTip.Tip="Search (Enter)"/>
+                <Button Grid.Column="2" Content="Open DMA" Click="OpenDma_Click" Classes="subtle" Margin="6,0,0,0" ToolTip.Tip="Open divamodarchive.com in your browser"/>
+                <TextBlock Grid.Column="3" Text="Sort" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="14,0,0,0" FontSize="11"/>
+                <ComboBox Grid.Column="4" x:Name="SortBox" SelectedIndex="{Binding SelectedSortIndex, Mode=TwoWay}" Margin="6,0,0,0" ToolTip.Tip="Sort results">
                     <ComboBoxItem>Latest</ComboBoxItem>
                     <ComboBoxItem>Downloads</ComboBoxItem>
                     <ComboBoxItem>Likes</ComboBoxItem>
                 </ComboBox>
-                <TextBlock Grid.Column="5" Text="Filter:" Foreground="#888" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                <ComboBox Grid.Column="6" x:Name="FilterBox" SelectedIndex="{Binding SelectedFilterIndex, Mode=TwoWay}" Margin="6,0,0,0">
+                <TextBlock Grid.Column="5" Text="Filter" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="14,0,0,0" FontSize="11"/>
+                <ComboBox Grid.Column="6" x:Name="FilterBox" SelectedIndex="{Binding SelectedFilterIndex, Mode=TwoWay}" Margin="6,0,0,0" ToolTip.Tip="Filter by category">
                     <ComboBoxItem>All</ComboBoxItem>
                     <ComboBoxItem>Song</ComboBoxItem>
                     <ComboBoxItem>Cover</ComboBoxItem>
@@ -38,19 +39,20 @@
         </Border>
 
         <!-- Page navigation -->
-        <Border Grid.Row="1" Background="#1A1A1A" Padding="12,6">
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
-                <Button Grid.Column="0" Content="&lt;&lt; Prev" Click="PrevPage_Click" IsEnabled="{Binding CanGoPrev}"/>
-                <TextBlock Grid.Column="1" Text="{Binding PageLabel}" VerticalAlignment="Center" Margin="12,0" Foreground="{DynamicResource MikuAccentBrush}"/>
-                <Button Grid.Column="3" Content="Next &gt;&gt;" Click="NextPage_Click" IsEnabled="{Binding CanGoNext}"/>
-                <TextBlock Grid.Column="4" Text="{Binding ResultCount}" Foreground="#888" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                <ProgressBar Grid.Column="5" Value="{Binding ProgressValue}" Maximum="100" Width="120" IsVisible="{Binding IsLoading}"/>
+        <Border Grid.Row="1" Background="{DynamicResource SurfaceBg}" Padding="14,8">
+            <Grid ColumnDefinitions="Auto,Auto,*">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                    <Button Content="◀ Prev" Click="PrevPage_Click" IsEnabled="{Binding CanGoPrev}" Classes="subtle" Padding="12,5"/>
+                    <Button Content="Next ▶" Click="NextPage_Click" IsEnabled="{Binding CanGoNext}" Classes="subtle" Padding="12,5"/>
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding ResultCount}" VerticalAlignment="Center" Margin="14,0,0,0" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"/>
             </Grid>
         </Border>
 
-        <!-- Results list -->
-        <Border Grid.Row="3" Background="#0F0F0F" Margin="8,0">
+        <!-- Results list + loading / empty overlays -->
+        <Grid Grid.Row="2" Margin="10,0">
             <ListBox x:Name="ResultsList"
+                     Classes="cards"
                      ItemsSource="{Binding Posts}"
                      SelectedItem="{Binding SelectedPost, Mode=TwoWay}"
                      Background="Transparent"
@@ -58,36 +60,64 @@
                      DoubleTapped="ResultsList_DoubleTapped">
                 <ListBox.ItemTemplate>
                     <DataTemplate DataType="vm:DmaPostViewModel">
-                        <Border Background="#1F1F1F" BorderBrush="#333" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,4">
+                        <Border Classes="card" Margin="0,3">
                             <Grid ColumnDefinitions="120,*,Auto">
                                 <ail:AdvancedImage Grid.Column="0" Source="{Binding ThumbnailUrl}" Width="120" Height="70" Stretch="UniformToFill"/>
-                                <StackPanel Grid.Column="1" Margin="12,0" Spacing="4">
-                                    <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="14" TextWrapping="Wrap"/>
+                                <StackPanel Grid.Column="1" Margin="14,0" Spacing="4">
+                                    <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="14" TextWrapping="Wrap" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                     <StackPanel Orientation="Horizontal" Spacing="12">
-                                        <TextBlock Text="{Binding AuthorLabel}" Foreground="#888" FontSize="11"/>
+                                        <TextBlock Text="{Binding AuthorLabel}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
                                         <TextBlock Text="{Binding TypeLabel}" Foreground="{DynamicResource MikuAccentBrush}" FontSize="11"/>
-                                        <TextBlock Text="{Binding DateLabel}" Foreground="#888" FontSize="11"/>
+                                        <TextBlock Text="{Binding DateLabel}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,2,0,0">
-                                        <TextBlock Text="{Binding DownloadsLabel}" Foreground="#888" FontSize="11"/>
-                                        <TextBlock Text="{Binding LikesLabel}" Foreground="#888" FontSize="11"/>
+                                        <TextBlock Text="{Binding DownloadsLabel}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+                                        <TextBlock Text="{Binding LikesLabel}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
                                         <TextBlock Text="{Binding FilesLabel}" Foreground="{DynamicResource MikuPinkBrush}" FontSize="11"/>
-                                        <TextBlock Text="{Binding SizeLabel}" Foreground="#888" FontSize="11"/>
+                                        <TextBlock Text="{Binding SizeLabel}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
                                     </StackPanel>
                                 </StackPanel>
-                                <Button Grid.Column="2" Content="Install" Click="Install_Click" Classes="primary" VerticalAlignment="Center"/>
+                                <Button Grid.Column="2" Content="Install" Click="Install_Click" Classes="primary" VerticalAlignment="Center"
+                                        IsEnabled="{Binding $parent[Window].DataContext.CanInstall}"
+                                        ToolTip.Tip="Download and install this mod (or double-click the row)"/>
                             </Grid>
                         </Border>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
+
+            <!-- Empty state -->
+            <Border Background="{DynamicResource SurfaceBg}" IsVisible="{Binding ShowEmpty}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                    <TextBlock Text="🔍" FontSize="44" HorizontalAlignment="Center" Opacity="0.4"/>
+                    <TextBlock Text="{Binding EmptyMessage}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{Binding EmptyHint}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Loading overlay -->
+            <Border Background="#CC161618" IsVisible="{Binding IsLoading}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+                    <ProgressBar IsIndeterminate="True" Width="200"/>
+                    <TextBlock Text="Loading mods…" Foreground="{DynamicResource MikuAccentBrush}" FontSize="13" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Install status bar -->
+        <Border Grid.Row="3" Background="{DynamicResource SurfaceBgAlt}" Padding="14,8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,1"
+                IsVisible="{Binding InstallStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Text="{Binding InstallStatus}" Foreground="{Binding InstallStatusColor}" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
+                <ProgressBar Grid.Column="1" Value="{Binding ProgressValue}" Maximum="100" Width="180" IsVisible="{Binding IsInstalling}" Margin="12,0,0,0"/>
+            </Grid>
         </Border>
 
         <!-- Selected mod detail -->
-        <Border Grid.Row="4" Background="#1F1F1F" Padding="12,8" BorderBrush="#333" BorderThickness="0,1,0,0">
+        <Border Grid.Row="4" Background="{DynamicResource SurfaceBgAlt}" Padding="14,10">
             <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Grid.Column="0" Text="{Binding SelectedDetail}" Foreground="#CCC" TextWrapping="Wrap" FontSize="11"/>
-                <Button Grid.Column="1" Content="Close" Click="Close_Click" Margin="12,0,0,0"/>
+                <TextBlock Grid.Column="0" Text="{Binding SelectedDetail}" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" FontSize="11"/>
+                <Button Grid.Column="1" Content="Close" Click="Close_Click" Classes="subtle" Margin="12,0,0,0" Padding="14,6" VerticalAlignment="Top" ToolTip.Tip="Close this window (Esc)"/>
             </Grid>
         </Border>
     </Grid>

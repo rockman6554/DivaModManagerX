@@ -19,10 +19,10 @@ public partial class LogEntry : ObservableObject
     public string TypeTag => Type.ToString().ToUpperInvariant();
     public string Color => Type switch
     {
-        LoggerType.Info => "#52FF00",
-        LoggerType.Warning => "#FFFF00",
-        LoggerType.Error => "#FFB0B0",
-        _ => "#F2F2F2"
+        LoggerType.Info => "#4ADE80",
+        LoggerType.Warning => "#FBBF24",
+        LoggerType.Error => "#F87171",
+        _ => "#E8E8EC"
     };
 }
 
@@ -48,11 +48,16 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty] private double _progressValue;
     [ObservableProperty] private bool _progressVisible;
     [ObservableProperty] private string _progressLabel = string.Empty;
-    [ObservableProperty] private Mod? _selectedMod;
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(MoveUpCommand))]
+    [NotifyCanExecuteChangedFor(nameof(MoveDownCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DeleteModCommand))]
+    private Mod? _selectedMod;
     [ObservableProperty] private string _gameExePath = string.Empty;
     [ObservableProperty] private string _modsFolderPath = string.Empty;
     [ObservableProperty] private string _dmlVersion = "Not installed";
     [ObservableProperty] private string _steamStatus = "Unknown";
+    [ObservableProperty] private string _modCountLabel = string.Empty;
 
     private string? _pendingDownloadUrl;
 
@@ -60,6 +65,14 @@ public partial class MainWindowViewModel : ObservableObject
     {
         _pendingDownloadUrl = pendingDownloadUrl;
         _mods = new ModService();
+        // Keep per-mod PropertyChanged hooks attached across refreshes/loadout swaps so a
+        // checkbox/switch toggle persists immediately (config + DML's config.toml).
+        _mods.ModList.CollectionChanged += (s, e) =>
+        {
+            if (e.NewItems != null)
+                foreach (Mod m in e.NewItems) AttachMod(m);
+            UpdateModCounts();
+        };
         _dml = new DmlUpdateService();
         _self = new SelfUpdateService();
         _gb = new GameBananaService();
@@ -177,6 +190,45 @@ public partial class MainWindowViewModel : ObservableObject
                 _pendingDownloadUrl = null;
             });
         }
+
+        UpdateModCounts();
+    }
+
+    private void AttachMod(Mod mod)
+    {
+        // -=/+= keeps the subscription single even when the same instance is re-added
+        // (alphabetical sort and loadout swaps clear + re-add existing Mod objects).
+        mod.PropertyChanged -= OnModPropertyChanged;
+        mod.PropertyChanged += OnModPropertyChanged;
+    }
+
+    private void OnModPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(Mod.enabled)) return;
+        PersistModState();
+        UpdateModCounts();
+    }
+
+    private void UpdateModCounts()
+    {
+        var total = _mods.ModList.Count;
+        var enabled = _mods.ModList.Count(m => m.enabled);
+        ModCountLabel = total == 0 ? string.Empty : $"{total} installed · {enabled} enabled";
+    }
+
+    /// <summary>
+    /// Save the current mod list to Config.json and mirror it into DML's config.toml so the
+    /// UI state and what the game will actually load never drift apart.
+    /// </summary>
+    private void PersistModState()
+    {
+        Global.UpdateConfig();
+        var gameCfg = Global.config!.Configs![CurrentGame]!;
+        if (string.IsNullOrEmpty(gameCfg.Launcher)) return;
+        var gameDir = System.IO.Path.GetDirectoryName(gameCfg.Launcher)!;
+        // Skip quietly when DML isn't installed yet — ApplyLoadoutToDml would log an error.
+        if (System.IO.File.Exists(System.IO.Path.Combine(gameDir, "config.toml")))
+            _mods.ApplyLoadoutToDml(gameDir);
     }
 
     [RelayCommand]
@@ -299,11 +351,21 @@ public partial class MainWindowViewModel : ObservableObject
                     Global.logger.WriteLine($"Copied launch option to clipboard ({session}): {text}", LoggerType.Info);
                     Global.logger.WriteLine("Paste it into Steam → Properties → Launch Options, then relaunch.", LoggerType.Warning);
                     SteamStatus = "Copied — paste in Steam Launch Options";
+                    await Helpers.DialogHelper.ShowInfoAsync(Helpers.MainWindowProvider.GetMainWindow(),
+                        "Steam launch option copied",
+                        "The launch option was copied to your clipboard.\n\nIn Steam: right-click the game → Properties → Launch Options → paste it (Ctrl+V), then come back and launch again.");
                 }
                 else
                 {
                     Global.logger.WriteLine($"Set the launch option manually: {text}", LoggerType.Error);
                 }
+            }
+            else
+            {
+                // Other failures (missing DML, missing config.toml, missing exe) — show an error dialog.
+                await Helpers.DialogHelper.ShowErrorAsync(Helpers.MainWindowProvider.GetMainWindow(),
+                    "Cannot launch the game",
+                    string.Join("\n", failures));
             }
             return;
         }
@@ -317,55 +379,56 @@ public partial class MainWindowViewModel : ObservableObject
         _launch.OpenModsFolder(Global.config!.Configs![CurrentGame]!.ModsFolder);
     }
 
-    [RelayCommand]
-    private void ToggleMod(Mod? mod)
-    {
-        if (mod == null) return;
-        mod.enabled = !mod.enabled;
-        Global.UpdateConfig();
-        var gameCfg = Global.config!.Configs![CurrentGame]!;
-        if (!string.IsNullOrEmpty(gameCfg.Launcher))
-        {
-            var gameDir = System.IO.Path.GetDirectoryName(gameCfg.Launcher)!;
-            _mods.ApplyLoadoutToDml(gameDir);
-        }
-    }
+    private bool HasSelectedMod() => SelectedMod != null;
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(HasSelectedMod))]
     private void MoveUp()
     {
         if (SelectedMod == null) return;
         var idx = _mods.ModList.IndexOf(SelectedMod);
         if (idx > 0) _mods.Reorder(idx, idx - 1);
-        Global.UpdateConfig();
+        PersistModState();
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(HasSelectedMod))]
     private void MoveDown()
     {
         if (SelectedMod == null) return;
         var idx = _mods.ModList.IndexOf(SelectedMod);
         if (idx >= 0 && idx < _mods.ModList.Count - 1) _mods.Reorder(idx, idx + 1);
-        Global.UpdateConfig();
+        PersistModState();
     }
 
     [RelayCommand]
     private void SortAlphabetical()
     {
+        var selected = SelectedMod;
         var sorted = _mods.ModList.OrderBy(m => m.name, new Helpers.NaturalSort()).ToList();
         _mods.ModList.Clear();
         foreach (var m in sorted) _mods.ModList.Add(m);
-        Global.UpdateConfig();
+        SelectedMod = selected;
+        PersistModState();
     }
 
-    [RelayCommand]
-    private void DeleteMod()
+    [RelayCommand(CanExecute = nameof(HasSelectedMod))]
+    private async Task DeleteModAsync()
     {
         if (SelectedMod == null) return;
+        var modName = SelectedMod.name;
+        var owner = Helpers.MainWindowProvider.GetMainWindow();
+        var confirm = await Helpers.DialogHelper.ShowConfirmDestructiveAsync(owner,
+            "Delete mod?",
+            $"This will permanently delete the mod folder \"{modName}\" from your mods directory.\n\nThis cannot be undone.",
+            "Delete", "Cancel");
+        if (!confirm)
+        {
+            Global.logger.WriteLine("Delete cancelled.", LoggerType.Info);
+            return;
+        }
         var modsFolder = Global.config!.Configs![CurrentGame]!.ModsFolder;
-        _mods.DeleteMod(modsFolder, SelectedMod.name);
-        Global.UpdateConfig();
-        Global.logger.WriteLine($"Deleted mod: {SelectedMod.name}", LoggerType.Warning);
+        _mods.DeleteMod(modsFolder, modName);
+        PersistModState();
+        Global.logger.WriteLine($"Deleted mod: {modName}", LoggerType.Warning);
     }
 
     [RelayCommand]
@@ -377,21 +440,44 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void AddLoadout()
+    private async Task AddLoadoutAsync()
     {
-        // Simple prompt via a dialog (we'd typically use a real dialog; here we use a default name)
-        var name = $"Loadout {Loadouts.Count + 1}";
-        if (!Loadouts.Contains(name))
+        var owner = Helpers.MainWindowProvider.GetMainWindow();
+        var name = await Helpers.DialogHelper.ShowInputAsync(owner,
+            "New loadout",
+            "Name for the new loadout:",
+            watermark: "e.g. Song packs, Vanilla+…",
+            initial: $"Loadout {Loadouts.Count + 1}",
+            okText: "Create");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        name = name.Trim();
+        if (Loadouts.Contains(name))
         {
-            Loadouts.Add(name);
-            Global.config!.Configs![CurrentGame]!.Loadouts![name] = new ObservableCollection<Mod>();
-            SelectedLoadout = name;
-            Global.UpdateConfig();
+            Global.logger.WriteLine($"A loadout named \"{name}\" already exists.", LoggerType.Warning);
+            return;
         }
+        Loadouts.Add(name);
+        Global.config!.Configs![CurrentGame]!.Loadouts![name] = new ObservableCollection<Mod>();
+        SelectedLoadout = name;
+        Global.UpdateConfig();
+        Global.logger.WriteLine($"Created loadout \"{name}\".", LoggerType.Info);
     }
 
     [RelayCommand]
-    private void DeleteLoadout()
+    private void ClearLog() => LogEntries.Clear();
+
+    [RelayCommand]
+    private async Task CopyLogAsync()
+    {
+        if (LogEntries.Count == 0) return;
+        var text = string.Join("\n", LogEntries.Select(e => $"[{e.Timestamp:HH:mm:ss}] {e.TypeTag} {e.Message}"));
+        var ok = await Helpers.ClipboardHelper.CopyAsync(text);
+        Global.logger.WriteLine(ok ? "Log copied to clipboard." : "Could not access the clipboard.",
+            ok ? LoggerType.Info : LoggerType.Error);
+    }
+
+    [RelayCommand]
+    private async Task DeleteLoadoutAsync()
     {
         if (SelectedLoadout == null || SelectedLoadout == "Default")
         {
@@ -399,6 +485,12 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
         var name = SelectedLoadout;
+        var owner = Helpers.MainWindowProvider.GetMainWindow();
+        var confirm = await Helpers.DialogHelper.ShowConfirmDestructiveAsync(owner,
+            "Delete loadout?",
+            $"Delete the loadout \"{name}\"? Mods in it will remain on disk but won't be grouped under this loadout anymore.",
+            "Delete", "Cancel");
+        if (!confirm) return;
         Global.config!.Configs![CurrentGame]!.Loadouts!.Remove(name);
         Loadouts.Remove(name);
         SelectedLoadout = "Default";
@@ -464,14 +556,19 @@ public partial class MainWindowViewModel : ObservableObject
         {
             Global.logger.WriteLine($"Copied launch option to clipboard ({session}):", LoggerType.Info);
             Global.logger.WriteLine($"    {text}", LoggerType.Info);
-            Global.logger.WriteLine("In Steam: right-click the game → Properties → Launch Options → paste.", LoggerType.Info);
             SteamStatus = "Copied — paste in Steam Launch Options";
+            await Helpers.DialogHelper.ShowInfoAsync(Helpers.MainWindowProvider.GetMainWindow(),
+                "Copied to clipboard",
+                "The Steam launch option is now in your clipboard:\n\n" + text + "\n\nOpen Steam → right-click \"Hatsune Miku: Project DIVA Mega Mix+\" → Properties → Launch Options → paste (Ctrl+V).");
         }
         else
         {
             Global.logger.WriteLine("Could not access the clipboard. Set the launch option manually:", LoggerType.Error);
             Global.logger.WriteLine($"    {text}", LoggerType.Info);
             SteamStatus = "Clipboard unavailable — set manually";
+            await Helpers.DialogHelper.ShowErrorAsync(Helpers.MainWindowProvider.GetMainWindow(),
+                "Clipboard unavailable",
+                "Could not access the clipboard. Set this launch option manually in Steam → Properties → Launch Options:\n\n" + text);
         }
     }
 
@@ -485,38 +582,14 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private async Task InstallFromUrlAsync()
     {
-        var desktop = App.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
-        var mainWindow = desktop?.MainWindow;
-        if (mainWindow == null) return;
-
-        var textBox = new Avalonia.Controls.TextBox
-        {
-            Watermark = "Paste a GameBanana mod URL (https://gamebanana.com/mods/...) or DMA URL (https://divamodarchive.com/posts/...)",
-            MinWidth = 500,
-            AcceptsReturn = false
-        };
-        var dialog = new Avalonia.Controls.Window
-        {
-            Title = "Install mod from URL",
-            Width = 600,
-            Height = 150,
-            WindowStartupLocation = Avalonia.Controls.WindowStartupLocation.CenterOwner,
-        };
-        var installBtn = new Avalonia.Controls.Button
-        {
-            Content = "Install",
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right
-        };
-        installBtn.Click += (s, e) => dialog.Close(textBox.Text);
-        dialog.Content = new Avalonia.Controls.StackPanel
-        {
-            Margin = new Avalonia.Thickness(12),
-            Spacing = 8,
-            Children = { textBox, installBtn }
-        };
-        var url = await dialog.ShowDialog<string?>(mainWindow);
-        if (string.IsNullOrEmpty(url)) return;
-        await HandleOneClickInstallAsync(url);
+        var owner = Helpers.MainWindowProvider.GetMainWindow();
+        var url = await Helpers.DialogHelper.ShowInputAsync(owner,
+            "Install mod from URL",
+            "Paste a GameBanana mod link or a DivaModArchive post link:",
+            watermark: "https://gamebanana.com/mods/…  or  https://divamodarchive.com/posts/…",
+            okText: "Install");
+        if (string.IsNullOrWhiteSpace(url)) return;
+        await HandleOneClickInstallAsync(url.Trim());
     }
 
     private async Task HandleOneClickInstallAsync(string url)
