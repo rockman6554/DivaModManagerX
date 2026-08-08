@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Text.Json.Serialization;
 
 namespace DivaModManager.Models
 {
@@ -22,6 +23,19 @@ namespace DivaModManager.Models
             get => _enabled;
             set { if (_enabled != value) { _enabled = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(enabled))); } }
         }
+
+        /// <summary>
+        /// Canonical category (Song/Cover/Module/UI/Plugin/Patch/Other), derived from the
+        /// mod's mod.json on disk at load time. Not serialized to Config.json — it is always
+        /// re-derived from the installed files so it stays in sync.
+        /// </summary>
+        [JsonIgnore]
+        public string Category
+        {
+            get => _category;
+            set { if (_category != value) { _category = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Category))); } }
+        }
+        private string _category = "Other";
 
         public event PropertyChangedEventHandler? PropertyChanged;
     }

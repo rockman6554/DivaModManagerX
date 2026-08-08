@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:DivaModManager.ViewModels"
         xmlns:models="using:DivaModManager.Models"
+        xmlns:ail="clr-namespace:AsyncImageLoader;assembly=AsyncImageLoader.Avalonia"
         x:Class="DivaModManager.Views.MainWindow"
         Icon="avares://DivaModManager/Assets/miku.ico"
         Title="DivaModManager X"
@@ -56,7 +57,7 @@
         </Border>
 
         <!-- Main content: 3 columns -->
-        <Grid Grid.Row="1" ColumnDefinitions="2*,1.2*,1*" Margin="10">
+        <Grid Grid.Row="1" ColumnDefinitions="2.5*,1.2*,1*" Margin="10">
 
             <!-- Column 1: Mods list -->
             <Border Grid.Column="0" Classes="panel">
@@ -72,33 +73,48 @@
                         </StackPanel>
                     </Grid>
 
-                    <!-- DataGrid with empty-state overlay -->
+                    <!-- Categorized mod list (collapsible Expanders) with empty-state overlay -->
                     <Grid Grid.Row="1">
-                        <DataGrid ItemsSource="{Binding ModList}"
-                                  SelectedItem="{Binding SelectedMod, Mode=TwoWay}"
-                                  GridLinesVisibility="Horizontal"
-                                  BorderThickness="1"
-                                  BorderBrush="{DynamicResource BorderBrush}"
-                                  CanUserReorderColumns="False"
-                                  CanUserSortColumns="False"
-                                  SelectionMode="Single"
-                                  IsReadOnly="True"
-                                  AutoGenerateColumns="False">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Mod Name" Binding="{Binding name}" Width="*"/>
-                                <!-- Template column: stays clickable even with IsReadOnly="True",
-                                     and toggles in a single click (a DataGridCheckBoxColumn does neither). -->
-                                <DataGridTemplateColumn Header="Enabled" Width="90">
-                                    <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate DataType="models:Mod">
-                                            <CheckBox IsChecked="{Binding enabled, Mode=TwoWay}"
-                                                      HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                      ToolTip.Tip="Enable/disable this mod"/>
-                                        </DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                            </DataGrid.Columns>
-                        </DataGrid>
+                        <ScrollViewer Background="Transparent" Padding="2,0,8,0" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding GroupedMods}" VerticalAlignment="Stretch">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel VerticalAlignment="Stretch" Spacing="6"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="vm:ModCategoryGroup">
+                                        <Expander IsExpanded="{Binding IsExpanded}" Margin="0,2" Padding="6,8,6,8"
+                                                  VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
+                                                  Background="{DynamicResource SurfaceBgElevated}"
+                                                  BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6">
+                                            <Expander.Header>
+                                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Category}" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                    <TextBlock Text="{Binding HeaderLabel}" Foreground="{DynamicResource MikuAccentBrush}" FontSize="12"/>
+                                                </StackPanel>
+                                            </Expander.Header>
+                                            <ItemsControl ItemsSource="{Binding Mods}" Margin="6,6,6,4">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="models:Mod">
+                                                        <Border Background="Transparent" CornerRadius="4" Padding="8,5" Margin="0,1"
+                                                                BorderBrush="Transparent" BorderThickness="1">
+                                                            <Grid ColumnDefinitions="*,Auto" Background="Transparent">
+                                                                <TextBlock Grid.Column="0" Text="{Binding name}" VerticalAlignment="Center" FontSize="13"
+                                                                           Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                                                <CheckBox Grid.Column="1" IsChecked="{Binding enabled, Mode=TwoWay}"
+                                                                          HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                                          ToolTip.Tip="Enable/disable this mod"/>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Expander>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
                         <!-- Empty state overlay -->
                         <Border Background="{DynamicResource SurfaceBg}"
                                 IsVisible="{Binding ModList.Count, Converter={x:Static vm:CountToVisibilityConverter.Instance}}"
@@ -111,31 +127,48 @@
                         </Border>
                     </Grid>
 
-                    <TextBlock Grid.Row="2" Text="Click a checkbox to toggle · Alt+↑/↓ to reorder · Del to delete. Changes are saved instantly." Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,6,0,0"/>
+                    <TextBlock Grid.Row="2" Text="Mods are grouped by category. Click a checkbox to toggle. Reordering and A-Z sort apply within each group." Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,6,0,0"/>
                 </Grid>
             </Border>
 
-            <!-- Column 2: Mod Info -->
+            <!-- Column 2: Mod Info (with preview image from mod.json metadata) -->
             <Border Grid.Column="1" Classes="panel" Margin="10,0">
-                <Grid RowDefinitions="Auto,*,Auto">
+                <Grid RowDefinitions="Auto,Auto,*,Auto">
                     <TextBlock Grid.Row="0" Text="Mod Info" Classes="header" Margin="0,0,0,10"/>
-                    <StackPanel Grid.Row="1" Spacing="8">
-                        <TextBlock Text="Name" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
-                        <TextBlock Text="{Binding SelectedMod.name, FallbackValue='(no mod selected)'}" FontWeight="SemiBold" TextWrapping="Wrap" FontSize="13"/>
-                        <ToggleSwitch IsChecked="{Binding SelectedMod.enabled, Mode=TwoWay}"
-                                      OnContent="Enabled" OffContent="Disabled"
-                                      IsEnabled="{Binding SelectedMod, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                      Margin="0,4,0,0"
-                                      ToolTip.Tip="Enable/disable the selected mod"/>
-                    </StackPanel>
-                    <StackPanel Grid.Row="2" Spacing="4">
-                        <TextBlock Text="Game" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
-                        <TextBlock Text="{Binding CurrentGame}" TextWrapping="Wrap"/>
-                        <TextBlock Text="Mods Folder" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,6,0,0"/>
-                        <TextBlock Text="{Binding ModsFolderPath}" TextWrapping="Wrap" FontFamily="Roboto Mono,monospace" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                        <TextBlock Text="Game Exe" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,6,0,0"/>
-                        <TextBlock Text="{Binding GameExePath}" TextWrapping="Wrap" FontFamily="Roboto Mono,monospace" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                        <TextBlock Text="DML Version" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,6,0,0"/>
+
+                    <!-- Preview image (from mod.json's preview field) -->
+                    <Border Grid.Row="1" Background="{DynamicResource SurfaceBg}" CornerRadius="6" Margin="0,0,0,10"
+                            HorizontalAlignment="Stretch" Height="140" ClipToBounds="True"
+                            IsVisible="{Binding SelectedModPreviewUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <ail:AdvancedImage Source="{Binding SelectedModPreviewUrl}" Stretch="UniformToFill"/>
+                    </Border>
+
+                    <ScrollViewer Grid.Row="2" Background="Transparent">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Name" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+                            <TextBlock Text="{Binding SelectedMod.name, FallbackValue='(select a mod)'}" FontWeight="SemiBold" TextWrapping="Wrap" FontSize="13"/>
+
+                            <TextBlock Text="{Binding SelectedModCategory}" Foreground="{DynamicResource MikuAccentBrush}" FontSize="11"
+                                       IsVisible="{Binding SelectedModCategory, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                            <TextBlock Text="{Binding SelectedModAuthor}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"
+                                       IsVisible="{Binding SelectedModAuthor, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                            <ToggleSwitch IsChecked="{Binding SelectedMod.enabled, Mode=TwoWay}"
+                                          OnContent="Enabled" OffContent="Disabled"
+                                          IsEnabled="{Binding SelectedMod, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                          Margin="0,4,0,0"
+                                          ToolTip.Tip="Enable/disable the selected mod"/>
+
+                            <!-- Description (trimmed for space) -->
+                            <TextBlock Text="{Binding SelectedModDescription, FallbackValue=''}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"
+                                       TextWrapping="Wrap" Margin="0,4,0,0" MaxLines="6" TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding SelectedModDescription, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <StackPanel Grid.Row="3" Spacing="4">
+                        <TextBlock Text="DML Version" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
                         <TextBlock Text="{Binding DmlVersion}" Foreground="{DynamicResource MikuAccentBrush}" FontWeight="SemiBold"/>
                     </StackPanel>
                 </Grid>

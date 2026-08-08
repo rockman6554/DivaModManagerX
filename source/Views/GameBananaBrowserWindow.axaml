@@ -11,103 +11,187 @@
         MinWidth="820" MinHeight="520"
         WindowStartupLocation="CenterOwner">
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto,Auto">
+    <Grid RowDefinitions="Auto,*,Auto">
 
-        <!-- Search bar -->
+        <!-- ===================== TOP: Search bar + pagination ===================== -->
         <Border Grid.Row="0" Background="{DynamicResource SurfaceBgAlt}" Padding="14,10" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto">
                 <TextBox Grid.Column="0" x:Name="SearchBox" Watermark="Search mods by name…  (Ctrl+F)" Text="{Binding SearchQuery, Mode=TwoWay}" KeyDown="SearchBox_KeyDown"/>
                 <Button Grid.Column="1" Content="Search" Click="Search_Click" Classes="primary" Margin="8,0,0,0" ToolTip.Tip="Search (Enter)"/>
-                <Button Grid.Column="2" Content="Open GameBanana" Click="OpenGameBanana_Click" Classes="subtle" Margin="6,0,0,0" ToolTip.Tip="Open gamebanana.com in your browser"/>
+                <Button Grid.Column="2" Content="Open GameBanana" Click="OpenGameBanana_Click" Classes="subtle" Margin="6,0,0,0"/>
                 <TextBlock Grid.Column="3" Text="Per page" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="14,0,0,0" FontSize="11"/>
-                <ComboBox Grid.Column="4" x:Name="PerPageBox" SelectedIndex="{Binding SelectedPerPageIndex, Mode=TwoWay}" Margin="6,0,0,0" ToolTip.Tip="Results per page">
+                <ComboBox Grid.Column="4" x:Name="PerPageBox" SelectedIndex="{Binding SelectedPerPageIndex, Mode=TwoWay}" Margin="6,0,0,0">
                     <ComboBoxItem>10</ComboBoxItem>
                     <ComboBoxItem>20</ComboBoxItem>
                     <ComboBoxItem>30</ComboBoxItem>
                     <ComboBoxItem>50</ComboBoxItem>
                 </ComboBox>
-            </Grid>
-        </Border>
-
-        <!-- Page navigation -->
-        <Border Grid.Row="1" Background="{DynamicResource SurfaceBg}" Padding="14,8">
-            <Grid ColumnDefinitions="Auto,Auto,*">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                <!-- Pagination in the top bar -->
+                <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="6" Margin="14,0,0,0">
                     <Button Content="◀ Prev" Click="PrevPage_Click" IsEnabled="{Binding CanGoPrev}" Classes="subtle" Padding="12,5"/>
+                    <TextBlock Text="{Binding ResultCount}" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"/>
                     <Button Content="Next ▶" Click="NextPage_Click" IsEnabled="{Binding CanGoNext}" Classes="subtle" Padding="12,5"/>
                 </StackPanel>
-                <TextBlock Grid.Column="1" Text="{Binding ResultCount}" VerticalAlignment="Center" Margin="14,0,0,0" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"/>
+                <ProgressBar Grid.Column="6" Value="{Binding ProgressValue}" Maximum="100" Width="100" IsVisible="{Binding IsLoading}" VerticalAlignment="Center" Margin="10,0,0,0"/>
             </Grid>
         </Border>
 
-        <!-- Results list + loading / empty overlays -->
-        <Grid Grid.Row="2" Margin="10,0">
-            <ListBox x:Name="ResultsList"
-                     Classes="cards"
-                     ItemsSource="{Binding Records}"
-                     SelectedItem="{Binding SelectedRecord, Mode=TwoWay}"
-                     Background="Transparent"
-                     BorderThickness="0"
-                     DoubleTapped="ResultsList_DoubleTapped">
-                <ListBox.ItemTemplate>
-                    <DataTemplate DataType="vm:GameBananaRecordViewModel">
-                        <Border Classes="card" Margin="0,3">
-                            <Grid ColumnDefinitions="120,*,Auto">
-                                <ail:AdvancedImage Grid.Column="0" Source="{Binding ThumbnailUrl}" Width="120" Height="70" Stretch="UniformToFill"/>
-                                <StackPanel Grid.Column="1" Margin="14,0" Spacing="4">
-                                    <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="14" TextWrapping="Wrap" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                    <StackPanel Orientation="Horizontal" Spacing="12">
-                                        <TextBlock Text="{Binding AuthorLabel}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
-                                        <TextBlock Text="{Binding CategoryLabel}" Foreground="{DynamicResource MikuAccentBrush}" FontSize="11"/>
-                                        <TextBlock Text="{Binding DateLabel}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,2,0,0">
-                                        <TextBlock Text="{Binding DownloadsLabel}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
-                                        <TextBlock Text="{Binding LikesLabel}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
-                                        <TextBlock Text="{Binding FilesLabel}" Foreground="{DynamicResource MikuPinkBrush}" FontSize="11"/>
-                                    </StackPanel>
-                                </StackPanel>
-                                <Button Grid.Column="2" Content="Install" Click="Install_Click" Classes="primary" VerticalAlignment="Center"
-                                        IsEnabled="{Binding $parent[Window].DataContext.CanInstall}"
-                                        ToolTip.Tip="Download and install this mod (or double-click the row)"/>
-                            </Grid>
+        <!-- ===================== MIDDLE: Two columns (results list | preview) ===================== -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,380" Margin="0">
+
+            <!-- LEFT: Categorized results list -->
+            <Grid Grid.Column="0" Margin="10,10,5,10">
+                <ScrollViewer Background="Transparent" Padding="0,0,4,0">
+                    <ItemsControl ItemsSource="{Binding GroupedRecords}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="6"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="vm:BrowserCategoryGroup">
+                                <Expander IsExpanded="{Binding IsExpanded}" Margin="0,2" Padding="6,8,6,8"
+                                          VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
+                                          Background="{DynamicResource SurfaceBgElevated}"
+                                          BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6">
+                                    <Expander.Header>
+                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Category}" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="{Binding HeaderLabel}" Foreground="{DynamicResource MikuAccentBrush}" FontSize="12"/>
+                                        </StackPanel>
+                                    </Expander.Header>
+                                    <ItemsControl ItemsSource="{Binding Items}" Margin="6,6,6,4">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="vm:GameBananaRecordViewModel">
+                                                <Border Classes="card" Margin="0,3" PointerPressed="Card_PointerPressed" Cursor="Hand">
+                                                    <Grid ColumnDefinitions="100,*,Auto">
+                                                        <ail:AdvancedImage Grid.Column="0" Source="{Binding ThumbnailUrl}" Width="100" Height="56" Stretch="UniformToFill"/>
+                                                        <StackPanel Grid.Column="1" Margin="12,0" Spacing="3">
+                                                            <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                                                <TextBlock Text="{Binding AuthorLabel}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/>
+                                                                <TextBlock Text="{Binding CategoryLabel}" Foreground="{DynamicResource MikuAccentBrush}" FontSize="10"/>
+                                                                <TextBlock Text="{Binding DateLabel}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/>
+                                                            </StackPanel>
+                                                            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,1,0,0">
+                                                                <TextBlock Text="{Binding DownloadsLabel}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/>
+                                                                <TextBlock Text="{Binding LikesLabel}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/>
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                        <Button Grid.Column="2" Content="Install" Click="Install_Click" Classes="primary" VerticalAlignment="Center"
+                                                                IsEnabled="{Binding $parent[Window].DataContext.CanInstall}"
+                                                                ToolTip.Tip="Download and install this mod"/>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Expander>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <!-- Empty state -->
+                <Border Background="{DynamicResource SurfaceBg}" IsVisible="{Binding ShowEmpty}">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                        <TextBlock Text="🔍" FontSize="44" HorizontalAlignment="Center" Opacity="0.4"/>
+                        <TextBlock Text="{Binding EmptyMessage}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                        <TextBlock Text="{Binding EmptyHint}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="360" TextAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Loading overlay -->
+                <Border Background="#CC161618" IsVisible="{Binding IsLoading}">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+                        <ProgressBar IsIndeterminate="True" Width="200"/>
+                        <TextBlock Text="Loading mods…" Foreground="{DynamicResource MikuAccentBrush}" FontSize="13" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- RIGHT: Mod preview / detail panel -->
+            <Border Grid.Column="1" Background="{DynamicResource SurfaceBgElevated}" Margin="5,10,10,10" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*">
+
+                    <!-- Large preview screenshot (530px quality) of the selected mod -->
+                    <Border Grid.Row="0" Background="{DynamicResource SurfaceBg}" CornerRadius="6,6,0,0" Height="260" ClipToBounds="True">
+                        <ail:AdvancedImage Source="{Binding SelectedRecord.PreviewUrl}" Stretch="UniformToFill"/>
+                    </Border>
+
+                    <!-- Mod title -->
+                    <StackPanel Grid.Row="1" Spacing="4" Margin="14,12,14,6">
+                        <TextBlock Text="{Binding SelectedRecord.Title, FallbackValue='Select a mod'}" FontWeight="Bold" FontSize="15" TextWrapping="Wrap" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                        <TextBlock Text="{Binding SelectedRecord.AuthorLabel, FallbackValue=''}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"/>
+                    </StackPanel>
+
+                    <!-- Category + date badges -->
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="14,0,14,8">
+                        <Border Background="{DynamicResource SurfaceBg}" CornerRadius="4" Padding="8,3">
+                            <TextBlock Text="{Binding SelectedRecord.CategoryLabel, FallbackValue=''}" Foreground="{DynamicResource MikuAccentBrush}" FontSize="11"/>
                         </Border>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+                        <Border Background="{DynamicResource SurfaceBg}" CornerRadius="4" Padding="8,3">
+                            <TextBlock Text="{Binding SelectedRecord.DateLabel, FallbackValue=''}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+                        </Border>
+                    </StackPanel>
 
-            <!-- Empty state -->
-            <Border Background="{DynamicResource SurfaceBg}" IsVisible="{Binding ShowEmpty}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
-                    <TextBlock Text="🔍" FontSize="44" HorizontalAlignment="Center" Opacity="0.4"/>
-                    <TextBlock Text="{Binding EmptyMessage}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
-                    <TextBlock Text="{Binding EmptyHint}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"/>
-                </StackPanel>
-            </Border>
+                    <!-- Stats row: downloads / likes / files -->
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="16" Margin="14,0,14,10">
+                        <TextBlock Text="{Binding SelectedRecord.DownloadsLabel, FallbackValue=''}" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="12" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding SelectedRecord.LikesLabel, FallbackValue=''}" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="12" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding SelectedRecord.FilesLabel, FallbackValue=''}" Foreground="{DynamicResource MikuPinkBrush}" FontSize="12" FontWeight="SemiBold"/>
+                    </StackPanel>
 
-            <!-- Loading overlay -->
-            <Border Background="#CC161618" IsVisible="{Binding IsLoading}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
-                    <ProgressBar IsIndeterminate="True" Width="200"/>
-                    <TextBlock Text="Loading mods…" Foreground="{DynamicResource MikuAccentBrush}" FontSize="13" HorizontalAlignment="Center"/>
-                </StackPanel>
+                    <!-- Action buttons: Install + View on GameBanana -->
+                    <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="8" Margin="14,0,14,8">
+                        <Button Content="Install" Click="Install_Click" Classes="primary" HorizontalAlignment="Stretch" Padding="20,10"
+                                FontSize="14" IsEnabled="{Binding $parent[Window].DataContext.CanInstall}"
+                                ToolTip.Tip="Download and install this mod"/>
+                        <Button Content="View on GameBanana" Click="ViewMod_Click" Classes="subtle" Padding="14,10"
+                                FontSize="12" ToolTip.Tip="Open this mod's page on GameBanana in your browser"/>
+                    </StackPanel>
+
+                    <!-- Gallery thumbnails (if the mod has multiple screenshots) -->
+                    <ItemsControl Grid.Row="5" ItemsSource="{Binding SelectedRecord.AllImageUrls}" Margin="14,0,14,6">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="4"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource SurfaceBg}" CornerRadius="3" Width="60" Height="38" ClipToBounds="True" Margin="0"
+                                        PointerPressed="GalleryImage_Click" Cursor="Hand" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                                    <ail:AdvancedImage Source="{Binding}" Stretch="UniformToFill"/>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Description / details (scrollable) -->
+                    <ScrollViewer Grid.Row="6" Background="Transparent" Margin="14,0,14,12">
+                        <TextBlock Text="{Binding SelectedDetail, FallbackValue='Select a mod from the list to see details and preview.'}"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" FontSize="11"/>
+                    </ScrollViewer>
+                </Grid>
             </Border>
         </Grid>
 
-        <!-- Install status bar -->
-        <Border Grid.Row="3" Background="{DynamicResource SurfaceBgAlt}" Padding="14,8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,1"
-                IsVisible="{Binding InstallStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-            <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Grid.Column="0" Text="{Binding InstallStatus}" Foreground="{Binding InstallStatusColor}" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
-                <ProgressBar Grid.Column="1" Value="{Binding ProgressValue}" Maximum="100" Width="180" IsVisible="{Binding IsInstalling}" Margin="12,0,0,0"/>
-            </Grid>
-        </Border>
-
-        <!-- Selected mod detail -->
-        <Border Grid.Row="4" Background="{DynamicResource SurfaceBgAlt}" Padding="14,10">
-            <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Grid.Column="0" Text="{Binding SelectedDetail}" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" FontSize="11"/>
-                <Button Grid.Column="1" Content="Close" Click="Close_Click" Classes="subtle" Margin="12,0,0,0" Padding="14,6" VerticalAlignment="Top" ToolTip.Tip="Close this window (Esc)"/>
+        <!-- ===================== BOTTOM: download / install status bar ===================== -->
+        <Border Grid.Row="2" Background="{DynamicResource SurfaceBgAlt}" Padding="14,8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                <!-- Install status text (Downloading… 45%, Extracting…, ✓ Installed, ✗ Failed) -->
+                <TextBlock Grid.Column="0" Text="{Binding InstallStatus, FallbackValue='Ready'}"
+                           Foreground="{Binding InstallStatusColor}"
+                           FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"/>
+                <!-- Progress bar (visible while downloading) -->
+                <ProgressBar Grid.Column="1" Value="{Binding ProgressValue}" Maximum="100" Width="180"
+                             IsVisible="{Binding IsInstalling}" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                <!-- Cancel button (visible only while installing) -->
+                <Button Grid.Column="2" Content="Cancel" Click="CancelInstall_Click" Classes="danger" Padding="14,6"
+                        Margin="12,0,0,0" IsVisible="{Binding IsInstalling}" ToolTip.Tip="Cancel the current download/install"/>
+                <Button Grid.Column="3" Content="Close" Click="Close_Click" Classes="subtle" Padding="14,6" Margin="12,0,0,0" ToolTip.Tip="Close this window (Esc)"/>
             </Grid>
         </Border>
     </Grid>

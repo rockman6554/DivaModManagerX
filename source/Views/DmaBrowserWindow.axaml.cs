@@ -107,5 +107,49 @@ public partial class DmaBrowserWindow : Window
         catch { }
     }
 
+    /// <summary>
+    /// Open the selected mod's DMA profile page in the user's default browser.
+    /// </summary>
+    private void ViewMod_Click(object? sender, RoutedEventArgs e)
+    {
+        var url = _vm.SelectedPost?.ProfileUrl;
+        if (string.IsNullOrEmpty(url)) return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch { }
+    }
+
     private void Close_Click(object? sender, RoutedEventArgs e) => Close();
+
+    private void CancelInstall_Click(object? sender, RoutedEventArgs e) => _vm.CancelInstall();
+
+    /// <summary>
+    /// When the user clicks a mod card in the results list, set it as the selected post
+    /// so the right-hand preview panel updates with its image, title, stats, etc.
+    /// </summary>
+    private void Card_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Avalonia.Controls.Border border &&
+            border.DataContext is DmaPostViewModel postVm)
+        {
+            _vm.SelectedPost = postVm;
+        }
+    }
+
+    /// <summary>
+    /// When the user clicks a gallery thumbnail, swap the large preview image.
+    /// </summary>
+    private void GalleryImage_Click(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Avalonia.Controls.Border border && border.DataContext is string url)
+        {
+            _vm.SelectedPost?.SelectImage(url);
+        }
+    }
 }

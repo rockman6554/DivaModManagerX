@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
@@ -43,7 +44,40 @@ public partial class DmaPostViewModel : ObservableObject
         }
     }
 
-    public DmaPostViewModel(DivaModArchivePost post) { Post = post; }
+    /// <summary>
+    /// The image currently shown in the large preview area. Set by clicking a gallery thumbnail.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PreviewUrl))]
+    private string? _selectedImageUrl;
+
+    public string? PreviewUrl => SelectedImageUrl ?? ThumbnailUrl;
+
+    /// <summary>Gallery thumbnails when a post has multiple images.</summary>
+    public List<string> AllImageUrls
+    {
+        get
+        {
+            var urls = new List<string>();
+            if (Post.Images != null)
+                foreach (var img in Post.Images)
+                    if (img != null) urls.Add(img.ToString());
+            return urls;
+        }
+    }
+
+    /// <summary>The DMA profile URL for the "View on DMA" button.</summary>
+    public string ProfileUrl => $"https://divamodarchive.com/posts/{Post.ID}";
+
+    public DmaPostViewModel(DivaModArchivePost post)
+    {
+        Post = post;
+        var first = AllImageUrls.FirstOrDefault();
+        if (first != null) SelectedImageUrl = first;
+    }
+
+    /// <summary>Swap the large preview image when a gallery thumbnail is clicked.</summary>
+    public void SelectImage(string url) => SelectedImageUrl = url;
 }
 
 public partial class DmaBrowserViewModel : ObservableObject
@@ -52,8 +86,15 @@ public partial class DmaBrowserViewModel : ObservableObject
     private int _page = 1;
     private int _perPage = 20;
     private CancellationTokenSource _loadCts = new();
+    private CancellationTokenSource? _installCts;
 
     public ObservableCollection<DmaPostViewModel> Posts { get; } = new();
+
+    /// <summary>
+    /// Same posts as <see cref="Posts"/> but bucketed by normalized category — used by the
+    /// collapsible category expanders above the flat results list.
+    /// </summary>
+    public ObservableCollection<BrowserCategoryGroup> GroupedPosts { get; } = new();
 
     [ObservableProperty] private string _searchQuery = string.Empty;
     [ObservableProperty] private DmaPostViewModel? _selectedPost;
@@ -170,6 +211,7 @@ public partial class DmaBrowserViewModel : ObservableObject
             TotalPages = feed.TotalPages > 0 ? feed.TotalPages : 1;
             foreach (var p in feed.Posts)
                 Posts.Add(new DmaPostViewModel(p));
+            RebuildBrowserGroups();
             ResultCount = feed.TotalRecords > 0
                 ? $"{feed.TotalRecords} mods total — page {_page} of {TotalPages}"
                 : $"{Posts.Count} mods on this page";
@@ -196,6 +238,30 @@ public partial class DmaBrowserViewModel : ObservableObject
                 OnPropertyChanged(nameof(CanGoNext));
             }
         }
+    }
+
+    /// <summary>
+    /// Rebuild <see cref="GroupedPosts"/> from <see cref="Posts"/>. Each DMA post's
+    /// <c>PostType</c> is normalized to a canonical category. Buckets are ordered in the
+    /// canonical Song→Cover→Module→UI→Plugin→Patch→Other order.
+    /// </summary>
+    private void RebuildBrowserGroups()
+    {
+        var expandedState = GroupedPosts.ToDictionary(g => g.Category, g => g.IsExpanded);
+        GroupedPosts.Clear();
+
+        var groups = Posts
+            .GroupBy(p => Helpers.CategoryNormalizer.Normalize(p.Post.PostType))
+            .Select(g => new BrowserCategoryGroup
+            {
+                Category = g.Key,
+                Items = new ObservableCollection<object>(g.Cast<object>()),
+                IsExpanded = expandedState.TryGetValue(g.Key, out var wasExpanded) ? wasExpanded : true
+            })
+            .OrderBy(g => Helpers.CategoryNormalizer.Order(g.Category));
+
+        foreach (var g in groups)
+            GroupedPosts.Add(g);
     }
 
     public async Task InstallSelectedAsync()
@@ -227,11 +293,11 @@ public partial class DmaBrowserViewModel : ObservableObject
         ProgressValue = 0;
         InstallStatus = "Preparing download…";
         InstallStatusColor = "#39C5BB";
-        var cts = new CancellationTokenSource();
+        _installCts = new CancellationTokenSource();
         try
         {
             Global.logger?.WriteLine($"Installing '{post.Name}' from DMA...", LoggerType.Info);
-            var ok = await _dma.InstallPostAsync(post, 0, modsFolder, cts);
+            var ok = await _dma.InstallPostAsync(post, 0, modsFolder, _installCts);
             if (ok)
             {
                 InstallStatus = $"✓ Installed '{post.Name}'";
@@ -254,8 +320,8 @@ public partial class DmaBrowserViewModel : ObservableObject
         finally
         {
             IsInstalling = false;
+            _installCts = null;
             InstallComplete?.Invoke();
-            // Auto-clear the status after a few seconds so it doesn't linger forever.
             _ = Task.Delay(6000).ContinueWith(_ =>
             {
                 if (InstallStatus.StartsWith("✓"))
@@ -264,5 +330,17 @@ public partial class DmaBrowserViewModel : ObservableObject
                 }
             });
         }
+    }
+
+    /// <summary>
+    /// Cancel an in-progress install (download + extraction). No-op if nothing is installing.
+    /// </summary>
+    public void CancelInstall()
+    {
+        if (!IsInstalling || _installCts == null) return;
+        try { _installCts.Cancel(); } catch { }
+        InstallStatus = "✗ Cancelled";
+        InstallStatusColor = "#F87171";
+        Global.logger?.WriteLine("Install cancelled by user.", LoggerType.Warning);
     }
 }
