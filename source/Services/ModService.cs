@@ -52,10 +52,76 @@ namespace DivaModManager.Services
                 if (!onDisk.Contains(ModList[i].name))
                     ModList.RemoveAt(i);
 
-            // Add new mods at the end (preserving any existing order)
+            // Add new mods at the end (preserving any existing order), reading each mod's
+            // category from its mod.json (preferred) or mod.toml on disk.
             foreach (var name in onDisk)
                 if (!ModList.Any(m => m.name == name))
-                    ModList.Add(new Mod { name = name, enabled = true });
+                {
+                    var mod = new Mod { name = name, enabled = true };
+                    mod.Category = ReadModCategory(Path.Combine(modsFolder, name));
+                    ModList.Add(mod);
+                }
+
+            // Also refresh the category of existing mods (mod.json may have been edited
+            // externally since the last load).
+            foreach (var mod in ModList)
+                mod.Category = ReadModCategory(Path.Combine(modsFolder, mod.name));
+        }
+
+        /// <summary>
+        /// Read a mod's category from its mod.json (preferred — written by GameBanana/DMA
+        /// install flows) or mod.toml fallback. Returns a canonical category
+        /// (Song/Cover/Module/UI/Plugin/Patch/Other) via <see cref="Helpers.CategoryNormalizer"/>.
+        /// </summary>
+        private static string ReadModCategory(string modDir)
+        {
+            string? raw = null;
+            // Prefer mod.json (JSON), the format written by the install flows.
+            var modJson = Path.Combine(modDir, "mod.json");
+            if (File.Exists(modJson))
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(modJson));
+                    if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                        doc.RootElement.TryGetProperty("cat", out var catEl) &&
+                        catEl.ValueKind == System.Text.Json.JsonValueKind.String)
+                        raw = catEl.GetString();
+                }
+                catch { }
+            }
+
+            // Fallback: mod.toml (written by CreateMod / older DMM).
+            if (raw == null)
+            {
+                var modToml = Path.Combine(modDir, "mod.toml");
+                if (File.Exists(modToml))
+                {
+                    try
+                    {
+                        var text = File.ReadAllText(modToml);
+                        if (Toml.TryToModel(text, out TomlTable? table, out _) &&
+                            table.TryGetValue("category", out var c))
+                            raw = c?.ToString();
+                    }
+                    catch { }
+                }
+            }
+
+            return Helpers.CategoryNormalizer.Normalize(raw);
+        }
+
+        /// <summary>
+        /// Re-read each in-memory mod's category from its on-disk mod.json/mod.toml.
+        /// Used after a loadout swap, because mods deserialized from Config.json only
+        /// carry name + enabled (Category is [JsonIgnore]) and would otherwise all fall
+        /// back to "Other".
+        /// </summary>
+        public void RefreshCategories(string modsFolder)
+        {
+            if (string.IsNullOrEmpty(modsFolder)) return;
+            foreach (var mod in ModList)
+                mod.Category = ReadModCategory(Path.Combine(modsFolder, mod.name));
         }
 
         /// <summary>

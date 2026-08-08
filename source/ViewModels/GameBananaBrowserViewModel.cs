@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
@@ -24,16 +25,53 @@ public partial class GameBananaRecordViewModel : ObservableObject
     {
         get
         {
-            // Use the GameBananaImage.ThumbnailUrl helper — it picks the smallest available
-            // variant (220px if present, falls back to full size) and constructs the URL
-            // via string concat (NOT new Uri(base, file) which has a known bug where
-            // base URLs not ending in '/' lose their last path segment).
             var firstImage = Record.Media?.FirstOrDefault(m => m?.Type == "image");
             return firstImage?.ThumbnailUrl;
         }
     }
 
-    public GameBananaRecordViewModel(GameBananaRecord record) { Record = record; }
+    /// <summary>
+    /// The image currently shown in the large preview area. Defaults to the first image's
+    /// 530px variant. Set <see cref="SelectedImageUrl"/> to swap when the user clicks a
+    /// gallery thumbnail.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PreviewUrl))]
+    private string? _selectedImageUrl;
+
+    public string? PreviewUrl => SelectedImageUrl;
+
+    /// <summary>All screenshot URLs for a gallery view (530px quality).</summary>
+    public List<string> AllImageUrls
+    {
+        get
+        {
+            var urls = new List<string>();
+            if (Record.Media == null) return urls;
+            foreach (var img in Record.Media)
+            {
+                if (img?.Type != "image" || string.IsNullOrEmpty(img.Base)) continue;
+                var file = !string.IsNullOrEmpty(img.File530) ? img.File530 : img.File;
+                if (!string.IsNullOrEmpty(file))
+                    urls.Add($"{img.Base}/{file}");
+            }
+            return urls;
+        }
+    }
+
+    /// <summary>The GameBanana profile URL for the "View on GameBanana" button.</summary>
+    public string? ProfileUrl => Record.Link?.ToString();
+
+    public GameBananaRecordViewModel(GameBananaRecord record)
+    {
+        Record = record;
+        // Initialize the large preview to the first image.
+        var first = AllImageUrls.FirstOrDefault();
+        if (first != null) SelectedImageUrl = first;
+    }
+
+    /// <summary>Swap the large preview image when a gallery thumbnail is clicked.</summary>
+    public void SelectImage(string url) => SelectedImageUrl = url;
 }
 
 public partial class GameBananaBrowserViewModel : ObservableObject
@@ -42,8 +80,15 @@ public partial class GameBananaBrowserViewModel : ObservableObject
     private int _page = 1;
     private int _perPage = 20;
     private CancellationTokenSource _loadCts = new();
+    private CancellationTokenSource? _installCts;
 
     public ObservableCollection<GameBananaRecordViewModel> Records { get; } = new();
+
+    /// <summary>
+    /// Same records as <see cref="Records"/> but bucketed by normalized category — used by the
+    /// collapsible category expanders above the flat results list.
+    /// </summary>
+    public ObservableCollection<BrowserCategoryGroup> GroupedRecords { get; } = new();
 
     [ObservableProperty] private string _searchQuery = string.Empty;
     [ObservableProperty] private GameBananaRecordViewModel? _selectedRecord;
@@ -158,6 +203,7 @@ public partial class GameBananaBrowserViewModel : ObservableObject
             TotalPages = feed.TotalPages > 0 ? feed.TotalPages : 1;
             foreach (var r in feed.Records)
                 Records.Add(new GameBananaRecordViewModel(r));
+            RebuildBrowserGroups();
             ResultCount = feed.TotalRecords > 0
                 ? $"{feed.TotalRecords} mods total — page {_page} of {TotalPages}"
                 : $"{Records.Count} mods on this page";
@@ -184,6 +230,29 @@ public partial class GameBananaBrowserViewModel : ObservableObject
                 OnPropertyChanged(nameof(CanGoNext));
             }
         }
+    }
+
+    /// <summary>
+    /// Rebuild <see cref="GroupedRecords"/> from <see cref="Records"/>. Each GameBanana
+    /// record's free-form <c>CategoryName</c> is normalized to a canonical category.
+    /// </summary>
+    private void RebuildBrowserGroups()
+    {
+        var expandedState = GroupedRecords.ToDictionary(g => g.Category, g => g.IsExpanded);
+        GroupedRecords.Clear();
+
+        var groups = Records
+            .GroupBy(r => Helpers.CategoryNormalizer.Normalize(r.Record.CategoryName))
+            .Select(g => new BrowserCategoryGroup
+            {
+                Category = g.Key,
+                Items = new ObservableCollection<object>(g.Cast<object>()),
+                IsExpanded = expandedState.TryGetValue(g.Key, out var wasExpanded) ? wasExpanded : true
+            })
+            .OrderBy(g => Helpers.CategoryNormalizer.Order(g.Category));
+
+        foreach (var g in groups)
+            GroupedRecords.Add(g);
     }
 
     public async Task InstallSelectedAsync()
@@ -215,12 +284,12 @@ public partial class GameBananaBrowserViewModel : ObservableObject
         ProgressValue = 0;
         InstallStatus = "Preparing download…";
         InstallStatusColor = "#39C5BB";
-        var cts = new CancellationTokenSource();
+        _installCts = new CancellationTokenSource();
         try
         {
             Global.logger?.WriteLine($"Installing '{record.Title}' from GameBanana...", LoggerType.Info);
             var file = record.AllFiles[0];
-            var ok = await _gb.InstallFromFileAsync(file.DownloadUrl!, file.FileName ?? $"gb-{record.Title}.zip", modsFolder, record, cts);
+            var ok = await _gb.InstallFromFileAsync(file.DownloadUrl!, file.FileName ?? $"gb-{record.Title}.zip", modsFolder, record, _installCts);
             if (ok)
             {
                 InstallStatus = $"✓ Installed '{record.Title}'";
@@ -243,6 +312,7 @@ public partial class GameBananaBrowserViewModel : ObservableObject
         finally
         {
             IsInstalling = false;
+            _installCts = null;
             InstallComplete?.Invoke();
             _ = Task.Delay(6000).ContinueWith(_ =>
             {
@@ -252,5 +322,17 @@ public partial class GameBananaBrowserViewModel : ObservableObject
                 }
             });
         }
+    }
+
+    /// <summary>
+    /// Cancel an in-progress install (download + extraction). No-op if nothing is installing.
+    /// </summary>
+    public void CancelInstall()
+    {
+        if (!IsInstalling || _installCts == null) return;
+        try { _installCts.Cancel(); } catch { }
+        InstallStatus = "✗ Cancelled";
+        InstallStatusColor = "#F87171";
+        Global.logger?.WriteLine("Install cancelled by user.", LoggerType.Warning);
     }
 }

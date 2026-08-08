@@ -114,5 +114,55 @@ public partial class GameBananaBrowserWindow : Window
         catch { }
     }
 
+    /// <summary>
+    /// Open the selected mod's GameBanana profile page in the user's default browser.
+    /// </summary>
+    private void ViewMod_Click(object? sender, RoutedEventArgs e)
+    {
+        var url = _vm.SelectedRecord?.ProfileUrl;
+        if (string.IsNullOrEmpty(url)) return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch { }
+    }
+
     private void Close_Click(object? sender, RoutedEventArgs e) => Close();
+
+    private void CancelInstall_Click(object? sender, RoutedEventArgs e) => _vm.CancelInstall();
+
+    /// <summary>
+    /// When the user clicks a mod card in the results list, set it as the selected record
+    /// so the right-hand preview panel updates with its image, title, stats, etc.
+    /// </summary>
+    private void Card_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Avalonia.Controls.Border border &&
+            border.DataContext is GameBananaRecordViewModel recVm)
+        {
+            _vm.SelectedRecord = recVm;
+        }
+    }
+
+    /// <summary>
+    /// When the user clicks a gallery thumbnail, swap the large preview image.
+    /// </summary>
+    private void GalleryImage_Click(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Avalonia.Controls.Border border)
+        {
+            // The gallery ItemsControl binds to a List<string>, so the item's DataContext
+            // is the URL string itself.
+            string? url = border.DataContext as string;
+            if (url == null && border.DataContext != null)
+                url = border.DataContext.ToString();
+            if (url != null)
+                _vm.SelectedRecord?.SelectImage(url);
+        }
+    }
 }

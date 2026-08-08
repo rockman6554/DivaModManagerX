@@ -41,6 +41,12 @@ public partial class MainWindowViewModel : ObservableObject
     public ObservableCollection<LogEntry> LogEntries { get; } = new();
     public ObservableCollection<string> Loadouts { get; } = new();
 
+    /// <summary>
+    /// Mods grouped by canonical category for the collapsible UI. Rebuilt whenever
+    /// <see cref="ModList"/> changes (loadout swap, refresh, sort, toggle, delete).
+    /// </summary>
+    public ObservableCollection<ModCategoryGroup> GroupedMods { get; } = new();
+
     [ObservableProperty] private string _currentGame = "Project DIVA Mega Mix+";
     [ObservableProperty] private string? _selectedLoadout;
     [ObservableProperty] private string _statusText = "Ready";
@@ -59,6 +65,13 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty] private string _steamStatus = "Unknown";
     [ObservableProperty] private string _modCountLabel = string.Empty;
 
+    // ---- Selected mod metadata (read from mod.json on disk) ----
+    [ObservableProperty] private string _selectedModAuthor = string.Empty;
+    [ObservableProperty] private string _selectedModDescription = string.Empty;
+    [ObservableProperty] private string? _selectedModPreviewUrl;
+    [ObservableProperty] private string _selectedModCategory = string.Empty;
+    [ObservableProperty] private string _selectedModHomepage = string.Empty;
+
     private string? _pendingDownloadUrl;
 
     public MainWindowViewModel(string? pendingDownloadUrl = null)
@@ -66,12 +79,14 @@ public partial class MainWindowViewModel : ObservableObject
         _pendingDownloadUrl = pendingDownloadUrl;
         _mods = new ModService();
         // Keep per-mod PropertyChanged hooks attached across refreshes/loadout swaps so a
-        // checkbox/switch toggle persists immediately (config + DML's config.toml).
+        // checkbox/switch toggle persists immediately (config + DML's config.toml). Also
+        // rebuild the category groups so the Expander UI stays in sync.
         _mods.ModList.CollectionChanged += (s, e) =>
         {
             if (e.NewItems != null)
                 foreach (Mod m in e.NewItems) AttachMod(m);
             UpdateModCounts();
+            RebuildGroups();
         };
         _dml = new DmlUpdateService();
         _self = new SelfUpdateService();
@@ -142,6 +157,11 @@ public partial class MainWindowViewModel : ObservableObject
         if (!string.IsNullOrEmpty(gameCfg.ModsFolder) && System.IO.Directory.Exists(gameCfg.ModsFolder))
         {
             _mods.Refresh(gameCfg.ModsFolder);
+            // Refresh populates Category for newly-added mods, but mods that came from the
+            // loadout config (deserialized) still have the "Other" default — overwrite all.
+            _mods.RefreshCategories(gameCfg.ModsFolder);
+            // Force-expand all categories on initial load so the user sees their mods.
+            RebuildGroupsExpanded();
             Global.logger.WriteLine($"Loaded {_mods.ModList.Count} mods from {gameCfg.ModsFolder}", LoggerType.Info);
         }
         else
@@ -204,9 +224,14 @@ public partial class MainWindowViewModel : ObservableObject
 
     private void OnModPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(Mod.enabled)) return;
-        PersistModState();
-        UpdateModCounts();
+        if (e.PropertyName == nameof(Mod.enabled))
+        {
+            PersistModState();
+            UpdateModCounts();
+        }
+        // Note: Category changes are handled by explicit RebuildGroups/RebuildGroupsExpanded
+        // calls after RefreshCategories. We do NOT rebuild here to avoid redundant rebuilds
+        // during the batch category update (which fires PropertyChanged per mod).
     }
 
     private void UpdateModCounts()
@@ -214,6 +239,58 @@ public partial class MainWindowViewModel : ObservableObject
         var total = _mods.ModList.Count;
         var enabled = _mods.ModList.Count(m => m.enabled);
         ModCountLabel = total == 0 ? string.Empty : $"{total} installed · {enabled} enabled";
+    }
+
+    /// <summary>
+    /// Rebuild <see cref="GroupedMods"/> from <see cref="ModList"/>. Mods are bucketed by their
+    /// canonical category and the buckets are ordered Song→Cover→Module→UI→Plugin→Patch→Other.
+    /// Called automatically when ModList changes.
+    /// </summary>
+    private void RebuildGroups()
+    {
+        // Preserve which categories the USER collapsed so a refresh doesn't undo their choice.
+        // Categories not seen before default to expanded (IsExpanded = true).
+        var expandedState = GroupedMods.ToDictionary(g => g.Category, g => g.IsExpanded);
+
+        GroupedMods.Clear();
+        if (ModList.Count == 0) return;
+
+        var groups = ModList
+            .GroupBy(m => m.Category)
+            .Select(g => new ModCategoryGroup
+            {
+                Category = g.Key,
+                Mods = new ObservableCollection<Mod>(g),
+                // Default to EXPANDED unless the user previously collapsed this category.
+                IsExpanded = expandedState.TryGetValue(g.Key, out var wasExpanded) ? wasExpanded : true
+            })
+            .OrderBy(g => Helpers.CategoryNormalizer.Order(g.Category));
+
+        foreach (var g in groups)
+            GroupedMods.Add(g);
+    }
+
+    /// <summary>
+    /// Force a full group rebuild with all categories expanded. Used during initial load
+    /// to ensure mods are visible (not hidden behind collapsed expanders).
+    /// </summary>
+    private void RebuildGroupsExpanded()
+    {
+        GroupedMods.Clear();
+        if (ModList.Count == 0) return;
+
+        var groups = ModList
+            .GroupBy(m => m.Category)
+            .Select(g => new ModCategoryGroup
+            {
+                Category = g.Key,
+                Mods = new ObservableCollection<Mod>(g),
+                IsExpanded = true
+            })
+            .OrderBy(g => Helpers.CategoryNormalizer.Order(g.Category));
+
+        foreach (var g in groups)
+            GroupedMods.Add(g);
     }
 
     /// <summary>
@@ -497,6 +574,48 @@ public partial class MainWindowViewModel : ObservableObject
         Global.UpdateConfig();
     }
 
+    /// <summary>
+    /// When the selected mod changes, load its metadata (author, description, preview,
+    /// category) from the mod.json on disk so the Mod Info panel can display it.
+    /// </summary>
+    partial void OnSelectedModChanged(Mod? value)
+    {
+        if (value == null)
+        {
+            SelectedModAuthor = string.Empty;
+            SelectedModDescription = string.Empty;
+            SelectedModPreviewUrl = null;
+            SelectedModCategory = string.Empty;
+            SelectedModHomepage = string.Empty;
+            return;
+        }
+
+        SelectedModCategory = $"📦 {value.Category}";
+        var modsFolder = Global.config?.Configs?[CurrentGame]?.ModsFolder;
+        if (string.IsNullOrEmpty(modsFolder)) return;
+
+        var modDir = System.IO.Path.Combine(modsFolder, value.name);
+        var modJson = System.IO.Path.Combine(modDir, "mod.json");
+        if (!System.IO.File.Exists(modJson)) return;
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(modJson));
+            var root = doc.RootElement;
+            SelectedModAuthor = root.TryGetProperty("submitter", out var sub) && sub.ValueKind == System.Text.Json.JsonValueKind.String
+                ? $"By {sub.GetString()}" : string.Empty;
+            SelectedModDescription = root.TryGetProperty("description", out var desc) && desc.ValueKind == System.Text.Json.JsonValueKind.String
+                ? desc.GetString() ?? string.Empty : string.Empty;
+            SelectedModPreviewUrl = root.TryGetProperty("preview", out var prev) && prev.ValueKind == System.Text.Json.JsonValueKind.String
+                ? prev.GetString() : null;
+            if (root.TryGetProperty("homepage", out var home) && home.ValueKind == System.Text.Json.JsonValueKind.String)
+                SelectedModHomepage = home.GetString() ?? string.Empty;
+            else
+                SelectedModHomepage = string.Empty;
+        }
+        catch { }
+    }
+
     partial void OnSelectedLoadoutChanged(string? value)
     {
         if (string.IsNullOrEmpty(value)) return;
@@ -508,6 +627,10 @@ public partial class MainWindowViewModel : ObservableObject
             _mods.ModList.Clear();
             foreach (var m in gameCfg.Loadouts[value])
                 _mods.ModList.Add(m);
+            // Mods from Config.json only have name+enabled — re-read their categories
+            // from disk so the category grouping stays correct after a loadout swap.
+            _mods.RefreshCategories(gameCfg.ModsFolder);
+            RebuildGroupsExpanded();
         }
         Global.UpdateConfig();
     }
